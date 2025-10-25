@@ -225,8 +225,8 @@ class MetalInventoryApp(tk.Tk):
         self.tree = ttk.Treeview(main_frame, columns=cols, show="headings")
         self.tree.heading("name", text="المعدن")
         self.tree.heading("quantity", text="الكمية (كجم)")
-        self.tree.heading("price", text="سعر شراء افتراضي (جنيه/كجم)")
-        self.tree.heading("value", text="القيمة الإجمالية (سعر بيع)")
+        self.tree.heading("price", text="سعر شراء المعدن (جنيه/كجم)")
+        self.tree.heading("value", text="القيمة الإجمالية")
         self.tree.heading("last", text="آخر تحديث")
         self.tree.heading("sources_count", text="عدد المصادر")
 
@@ -242,7 +242,7 @@ class MetalInventoryApp(tk.Tk):
         # شريط الحالة السفلي
         status_frame = ttk.Frame(self)
         status_frame.pack(fill=tk.X, padx=8, pady=6)
-        self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون (سعر البيع): 0 جنيه")
+        self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون : 0 جنيه")
         self.total_profit_label = ttk.Label(status_frame, text="إجمالي الربح: 0 جنيه")
         self.last_backup_label = ttk.Label(status_frame, text="آخر نسخة احتياطية: -")
 
@@ -736,4 +736,5 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
