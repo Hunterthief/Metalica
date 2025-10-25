@@ -14,6 +14,8 @@
  - واجهة أكثر حداثة ونقاءً
  - إضافة زر لحذف المعادن
  - نافذة لتعديل سجل العمليات
+ - دعم الوضع المظلم والفاتح
+ - استخدام ألوان زاهية ولامعة
 """
 
 import os
@@ -28,6 +30,7 @@ import threading
 DATA_FILE = "data.json"
 BACKUP_DIR = "backups"
 AUTO_BACKUP_INTERVAL_SECONDS = 30 * 60  # 30 دقيقة
+SETTINGS_FILE = "settings.json"
 
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
@@ -110,6 +113,22 @@ def start_auto_backup(app):
     t = threading.Thread(target=loop, daemon=True)
     t.start()
 
+def load_settings():
+    """تحميل إعدادات التطبيق (الوضع المظلم/الفاتح)"""
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+            return settings
+        except:
+            pass
+    return {"dark_mode": False}
+
+def save_settings(settings):
+    """حفظ إعدادات التطبيق"""
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
+
 # ---------------------------------------------------------------------
 # دوال المساعدة
 # ---------------------------------------------------------------------
@@ -166,14 +185,62 @@ class MetalInventoryApp(tk.Tk):
         self.title("Metalica - إدارة مخزون المعادن")
         self.geometry("1200x700")
         self.option_add("*Font", ("Cairo", 11))
+        
+        # تحميل الإعدادات
+        self.settings = load_settings()
+        self.dark_mode = self.settings.get("dark_mode", False)
+        
+        # تهيئة النمط
         self.style = ttk.Style()
-        self.style.theme_use("clam")  # استخدام سمة أكثر حداثة
+        self.apply_theme()
+        
         self.data = load_data()
         self.check_restore_on_start()
         self.create_widgets()
         self.refresh_table()
         start_auto_backup(self)
         self.protocol("WM_DELETE_WINDOW", self.on_exit)  # عند الإغلاق
+
+    def apply_theme(self):
+        """تطبيق النمط حسب الوضع (فاتح أو مظلم)"""
+        if self.dark_mode:
+            # الوضع المظلم
+            self.style.theme_use("clam")
+            self.style.configure("TFrame", background="#2c2c2c")
+            self.style.configure("TLabel", background="#2c2c2c", foreground="#ffffff")
+            self.style.configure("TButton", background="#444444", foreground="#ffffff")
+            self.style.configure("Treeview", background="#333333", foreground="#ffffff", fieldbackground="#333333")
+            self.style.configure("Treeview.Heading", background="#555555", foreground="#ffffff")
+            self.style.map("TButton", background=[("active", "#555555")])
+            self.style.configure("TEntry", fieldbackground="#444444", foreground="#ffffff")
+            self.style.configure("TCombobox", fieldbackground="#444444", foreground="#ffffff")
+            self.style.map("TCombobox", fieldbackground=[("readonly", "#444444")])
+            
+            # تعيين لون خلفية النافذة الرئيسية
+            self.configure(bg="#2c2c2c")
+        else:
+            # الوضع الفاتح
+            self.style.theme_use("clam")
+            self.style.configure("TFrame", background="#f0f0f0")
+            self.style.configure("TLabel", background="#f0f0f0", foreground="#000000")
+            self.style.configure("TButton", background="#0078d7", foreground="#ffffff")
+            self.style.configure("Treeview", background="#ffffff", foreground="#000000", fieldbackground="#ffffff")
+            self.style.configure("Treeview.Heading", background="#0078d7", foreground="#ffffff")
+            self.style.map("TButton", background=[("active", "#106ebe")])
+            self.style.configure("TEntry", fieldbackground="#ffffff", foreground="#000000")
+            self.style.configure("TCombobox", fieldbackground="#ffffff", foreground="#000000")
+            self.style.map("TCombobox", fieldbackground=[("readonly", "#ffffff")])
+            
+            # تعيين لون خلفية النافذة الرئيسية
+            self.configure(bg="#f0f0f0")
+
+    def toggle_theme(self):
+        """تبديل بين الوضع المظلم والفاتح"""
+        self.dark_mode = not self.dark_mode
+        self.settings["dark_mode"] = self.dark_mode
+        save_settings(self.settings)
+        self.apply_theme()
+        self.refresh_table()
 
     # -----------------------------------------------------------------
     # عند بدء التشغيل
@@ -208,9 +275,10 @@ class MetalInventoryApp(tk.Tk):
         self.btn_history = ttk.Button(toolbar_frame, text="🕒 السجل", command=self.open_history_window)
         self.btn_export = ttk.Button(toolbar_frame, text="⬇️ تصدير", command=self.export_data)
         self.btn_import = ttk.Button(toolbar_frame, text="⬆️ استيراد", command=self.import_data)
+        self.btn_theme = ttk.Button(toolbar_frame, text="🌙/☀️ تغيير الوضع", command=self.toggle_theme)
 
         # ترتيب الأزرار من اليمين إلى اليسار
-        for w in [self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
+        for w in [self.btn_theme, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
                   self.btn_remove_stock, self.btn_add_stock, self.btn_add_metal]:
             w.pack(side=tk.RIGHT, padx=3)
 
