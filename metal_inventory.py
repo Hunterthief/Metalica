@@ -444,7 +444,7 @@ class MetalInventoryApp(tk.Tk):
             last = m.get("last_updated","")
             sources_count = len(m.get("lots", []))
             self.tree.insert("", "end", iid=name, values=(name, qty, m.get("price_per_kg",0.0), value, last, sources_count))
-        self.total_value_label.config(text=f"إجمالي قيمة المخزون (سعر البيع): {round(total_value,2)} جنيه")
+        self.total_value_label.config(text=f"إجمالي قيمة المخزون (سعر الشراء): {round(total_value,2)} جنيه")
         self.total_profit_label.config(text=f"إجمالي الربح: {round(total_profit,2)} جنيه")
         backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_")])
         last = backups[-1] if backups else "-"
@@ -736,5 +736,6 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
