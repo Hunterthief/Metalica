@@ -8,9 +8,12 @@
  - بيع/سحب كمية مع احتساب cost-basis (FIFO) وحساب الربح لكل معدن وإجمالي الربح
  - سجل بالعربية، تصدير CSV/JSON، استيراد JSON
  - نسخ احتياطي تلقائي بأسماء ملفات بصيغة AM/PM
- - نافذة السجل تُفتح مكبَّرة
+ - نافذة السجل تُفتح مكبَّرة
  - تعديل أسعار (سعر شراء افتراضي لكل معدن، سعر بيع افتراضي)
  - عند إغلاق البرنامج، يسأل المستخدم ما إذا كان يريد إنشاء نسخة احتياطية قبل الإغلاق
+ - واجهة أكثر حداثة ونقاءً
+ - إضافة زر لحذف المعادن
+ - نافذة لتعديل سجل العمليات
 """
 
 import os
@@ -160,9 +163,11 @@ def deduct_from_lots(metal, qty_to_remove):
 class MetalInventoryApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Metalica")
-        self.geometry("1000x650")
+        self.title("Metalica - إدارة مخزون المعادن")
+        self.geometry("1200x700")
         self.option_add("*Font", ("Cairo", 11))
+        self.style = ttk.Style()
+        self.style.theme_use("clam")  # استخدام سمة أكثر حداثة
         self.data = load_data()
         self.check_restore_on_start()
         self.create_widgets()
@@ -191,38 +196,39 @@ class MetalInventoryApp(tk.Tk):
     # واجهة المستخدم
     # -----------------------------------------------------------------
     def create_widgets(self):
-        top_frame = ttk.Frame(self)
-        top_frame.pack(fill=tk.X, padx=8, pady=6)
-
-        self.btn_add_metal = ttk.Button(top_frame, text="➕ إضافة معدن", command=self.open_add_metal_menu)
-        self.btn_add_stock = ttk.Button(top_frame, text="📦 إضافة كمية", command=self.open_add_stock)
-        self.btn_remove_stock = ttk.Button(top_frame, text="💰 بيع / سحب كمية", command=self.open_remove_stock)
-        self.btn_history = ttk.Button(top_frame, text="🕒 السجل", command=self.open_history_window)
-        self.btn_export = ttk.Button(top_frame, text="⬇️ تصدير", command=self.export_data)
-        self.btn_import = ttk.Button(top_frame, text="⬆️ استيراد", command=self.import_data)
+        # إطار الأدوات العلوية
+        toolbar_frame = ttk.Frame(self)
+        toolbar_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        # أزرار الأدوات
+        self.btn_add_metal = ttk.Button(toolbar_frame, text="➕ إضافة معدن", command=self.open_add_metal_menu)
+        self.btn_add_stock = ttk.Button(toolbar_frame, text="📦 إضافة كمية", command=self.open_add_stock)
+        self.btn_remove_stock = ttk.Button(toolbar_frame, text="💰 بيع / سحب كمية", command=self.open_remove_stock)
+        self.btn_remove_metal = ttk.Button(toolbar_frame, text="🗑️ حذف معدن", command=self.remove_metal)
+        self.btn_history = ttk.Button(toolbar_frame, text="🕒 السجل", command=self.open_history_window)
+        self.btn_export = ttk.Button(toolbar_frame, text="⬇️ تصدير", command=self.export_data)
+        self.btn_import = ttk.Button(toolbar_frame, text="⬆️ استيراد", command=self.import_data)
 
         # ترتيب الأزرار من اليمين إلى اليسار
-        for w in [self.btn_import, self.btn_export, self.btn_history, self.btn_remove_stock, self.btn_add_stock, self.btn_add_metal]:
-            w.pack(side=tk.RIGHT, padx=4)
-
-        # تعطيل زر إضافة معدن موجود إذا لم يكن هناك معادن
-        self.btn_add_existing_state = tk.NORMAL if self.data.get("metals") else tk.DISABLED
+        for w in [self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
+                  self.btn_remove_stock, self.btn_add_stock, self.btn_add_metal]:
+            w.pack(side=tk.RIGHT, padx=3)
 
         # شريط البحث
         search_frame = ttk.Frame(self)
-        search_frame.pack(fill=tk.X, padx=8)
-        ttk.Label(search_frame, text="بحث:").pack(side=tk.RIGHT, padx=4)
+        search_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(search_frame, text="بحث:").pack(side=tk.RIGHT, padx=(0, 5))
         self.search_var = tk.StringVar()
         entry_search = ttk.Entry(search_frame, textvariable=self.search_var, justify="right")
-        entry_search.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        entry_search.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(0, 5))
         entry_search.bind("<KeyRelease>", lambda e: self.refresh_table())
 
         # جدول المعادن
         main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         cols = ("name","quantity","price","value","last","sources_count")
-        self.tree = ttk.Treeview(main_frame, columns=cols, show="headings")
+        self.tree = ttk.Treeview(main_frame, columns=cols, show="headings", height=15)
         self.tree.heading("name", text="المعدن")
         self.tree.heading("quantity", text="الكمية (كجم)")
         self.tree.heading("price", text="سعر شراء المعدن (جنيه/كجم)")
@@ -234,15 +240,17 @@ class MetalInventoryApp(tk.Tk):
             self.tree.column(c, anchor="center", width=150)
 
         vsb = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscroll=vsb.set)
+        hsb = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscroll=vsb.set, xscroll=hsb.set)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         self.tree.bind("<Double-1>", self.on_item_double_click)
 
         # شريط الحالة السفلي
         status_frame = ttk.Frame(self)
-        status_frame.pack(fill=tk.X, padx=8, pady=6)
-        self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون : 0 جنيه")
+        status_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون (سعر الشراء): 0 جنيه")
         self.total_profit_label = ttk.Label(status_frame, text="إجمالي الربح: 0 جنيه")
         self.last_backup_label = ttk.Label(status_frame, text="آخر نسخة احتياطية: -")
 
@@ -271,7 +279,7 @@ class MetalInventoryApp(tk.Tk):
         ttk.Label(menu, text="اختر نوع الإضافة:").pack(pady=10)
         btn_new = ttk.Button(menu, text="➕ معدن جديد", command=lambda:[menu.destroy(), self.open_add_metal_dialog()])
         btn_new.pack(pady=5)
-        btn_existing = ttk.Button(menu, text="⬆️ إضافة لمعدن موجود", state=self.btn_add_existing_state,
+        btn_existing = ttk.Button(menu, text="⬆️ إضافة لمعدن موجود", 
                                   command=lambda:[menu.destroy(), self.open_add_stock()])
         btn_existing.pack(pady=5)
 
@@ -313,7 +321,6 @@ class MetalInventoryApp(tk.Tk):
             save_data(self.data)
             make_backup(self.data)
             self.refresh_table()
-            self.btn_add_existing_state = tk.NORMAL
 
     def open_add_stock(self):
         dialog = AddStockDialog(self, self.data.get("metals", []))
@@ -388,6 +395,28 @@ class MetalInventoryApp(tk.Tk):
             make_backup(self.data)
             self.refresh_table()
 
+    def remove_metal(self):
+        """حذف معدن من القائمة"""
+        selected_item = self.tree.focus()
+        if not selected_item:
+            messagebox.showwarning("تحذير", "يرجى تحديد معدن لحذفه.")
+            return
+        
+        metal_name = self.tree.item(selected_item, "values")[0]
+        if not messagebox.askyesno("تأكيد الحذف", f"هل أنت متأكد من حذف المعدن '{metal_name}'؟"):
+            return
+        
+        # حذف المعدن من البيانات
+        self.data["metals"] = [m for m in self.data["metals"] if m["name"] != metal_name]
+        
+        # حذف سجلات المعدن من التاريخ
+        self.data["history"] = [h for h in self.data["history"] if h.get("metal") != metal_name]
+        
+        save_data(self.data)
+        make_backup(self.data)
+        self.refresh_table()
+        messagebox.showinfo("تم", f"تم حذف المعدن '{metal_name}' بنجاح.")
+
     def open_history_window(self):
         HistoryWindow(self, self.data.get("history", []))
 
@@ -417,7 +446,6 @@ class MetalInventoryApp(tk.Tk):
                 make_backup(self.data)
                 self.refresh_table()
                 messagebox.showinfo("تم", "تم استيراد البيانات.")
-                self.btn_add_existing_state = tk.NORMAL if self.data.get("metals") else tk.DISABLED
             else:
                 messagebox.showerror("خطأ", "ملف غير صالح.")
         except Exception as e:
@@ -437,8 +465,8 @@ class MetalInventoryApp(tk.Tk):
             if q and q not in name:
                 continue
             qty = metal_total_quantity(m)
-            sale_price = float(m.get("sale_price_per_kg", 0.0))
-            value = round(qty * sale_price, 2)
+            buy_price = float(m.get("price_per_kg", 0.0))  # تعديل: استخدام سعر الشراء
+            value = round(qty * buy_price, 2)  # تعديل: حساب القيمة بسعر الشراء
             total_value += value
             total_profit += float(m.get("profit_total", 0.0))
             last = m.get("last_updated","")
@@ -678,10 +706,15 @@ class HistoryWindow:
             except:
                 pass
         top.geometry("900x600")
-        tool = ttk.Frame(top)
-        tool.pack(fill=tk.X, padx=6, pady=6)
-        ttk.Button(tool, text="تصدير CSV", command=lambda: self.export_csv(history)).pack(side=tk.LEFT, padx=4)
-        ttk.Button(tool, text="تصدير JSON", command=lambda: self.export_json(history)).pack(side=tk.LEFT, padx=4)
+        
+        # إطار الأدوات
+        tool_frame = ttk.Frame(top)
+        tool_frame.pack(fill=tk.X, padx=6, pady=6)
+        ttk.Button(tool_frame, text="تصدير CSV", command=lambda: self.export_csv(history)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(tool_frame, text="تصدير JSON", command=lambda: self.export_json(history)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(tool_frame, text="تعديل سجل", command=lambda: self.edit_history_entry(history)).pack(side=tk.LEFT, padx=4)
+        
+        # جدول السجل
         cols = ("date","operation","metal","quantity","price_per_kg","total_price","person","cost_basis","profit")
         headers_ar = {
             "date":"التاريخ",
@@ -694,20 +727,29 @@ class HistoryWindow:
             "cost_basis":"تكلفة الشراء",
             "profit":"الربح"
         }
-        tree = ttk.Treeview(top, columns=cols, show="headings")
+        tree_frame = ttk.Frame(top)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        
+        self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=15)
         for c in cols:
-            tree.heading(c, text=headers_ar.get(c,c))
-            tree.column(c, anchor="center")
-        vsb = ttk.Scrollbar(top, orient="vertical", command=tree.yview)
-        tree.configure(yscroll=vsb.set)
+            self.tree.heading(c, text=headers_ar.get(c,c))
+            self.tree.column(c, anchor="center", width=100)
+        
+        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscroll=vsb.set, xscroll=hsb.set)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        for h in history:
-            tree.insert("", "end", values=(
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        # ملء الجدول
+        for i, h in enumerate(history):
+            self.tree.insert("", "end", iid=i, values=(
                 h.get("date"), h.get("operation"), h.get("metal"), h.get("quantity"),
                 h.get("price_per_kg"), h.get("total_price"), h.get("person"),
                 h.get("cost_basis",""), h.get("profit","")
             ))
+    
     def export_csv(self, history):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
         if not path:
@@ -721,6 +763,7 @@ class HistoryWindow:
             messagebox.showinfo("تم", "تم تصدير السجل CSV.")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل التصدير: {e}")
+    
     def export_json(self, history):
         path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")])
         if not path:
@@ -731,11 +774,100 @@ class HistoryWindow:
             messagebox.showinfo("تم", "تم تصدير السجل JSON.")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل التصدير: {e}")
+    
+    def edit_history_entry(self, history):
+        """نافذة لتعديل سجل العمليات"""
+        selected_item = self.tree.focus()
+        if not selected_item:
+            messagebox.showwarning("تحذير", "يرجى تحديد سجل لتعديله.")
+            return
+        
+        index = int(selected_item)
+        entry = history[index]
+        
+        # نافذة التعديل
+        edit_window = tk.Toplevel(self.top)
+        edit_window.title("تعديل سجل")
+        edit_window.transient(self.top)
+        edit_window.grab_set()
+        
+        # حقول التعديل
+        fields = {}
+        ttk.Label(edit_window, text="التاريخ:").grid(row=0, column=1, sticky="e")
+        fields["date"] = ttk.Entry(edit_window, justify="right")
+        fields["date"].grid(row=0, column=0, padx=5, pady=2)
+        fields["date"].insert(0, entry.get("date", ""))
+        
+        ttk.Label(edit_window, text="العملية:").grid(row=1, column=1, sticky="e")
+        fields["operation"] = ttk.Entry(edit_window, justify="right")
+        fields["operation"].grid(row=1, column=0, padx=5, pady=2)
+        fields["operation"].insert(0, entry.get("operation", ""))
+        
+        ttk.Label(edit_window, text="المعدن:").grid(row=2, column=1, sticky="e")
+        fields["metal"] = ttk.Entry(edit_window, justify="right")
+        fields["metal"].grid(row=2, column=0, padx=5, pady=2)
+        fields["metal"].insert(0, entry.get("metal", ""))
+        
+        ttk.Label(edit_window, text="الكمية:").grid(row=3, column=1, sticky="e")
+        fields["quantity"] = ttk.Entry(edit_window, justify="right")
+        fields["quantity"].grid(row=3, column=0, padx=5, pady=2)
+        fields["quantity"].insert(0, str(entry.get("quantity", 0)))
+        
+        ttk.Label(edit_window, text="السعر لكل كجم:").grid(row=4, column=1, sticky="e")
+        fields["price_per_kg"] = ttk.Entry(edit_window, justify="right")
+        fields["price_per_kg"].grid(row=4, column=0, padx=5, pady=2)
+        fields["price_per_kg"].insert(0, str(entry.get("price_per_kg", 0)))
+        
+        ttk.Label(edit_window, text="القيمة الإجمالية:").grid(row=5, column=1, sticky="e")
+        fields["total_price"] = ttk.Entry(edit_window, justify="right")
+        fields["total_price"].grid(row=5, column=0, padx=5, pady=2)
+        fields["total_price"].insert(0, str(entry.get("total_price", 0)))
+        
+        ttk.Label(edit_window, text="الطرف:").grid(row=6, column=1, sticky="e")
+        fields["person"] = ttk.Entry(edit_window, justify="right")
+        fields["person"].grid(row=6, column=0, padx=5, pady=2)
+        fields["person"].insert(0, entry.get("person", ""))
+        
+        ttk.Label(edit_window, text="تكلفة الشراء:").grid(row=7, column=1, sticky="e")
+        fields["cost_basis"] = ttk.Entry(edit_window, justify="right")
+        fields["cost_basis"].grid(row=7, column=0, padx=5, pady=2)
+        fields["cost_basis"].insert(0, str(entry.get("cost_basis", 0)))
+        
+        ttk.Label(edit_window, text="الربح:").grid(row=8, column=1, sticky="e")
+        fields["profit"] = ttk.Entry(edit_window, justify="right")
+        fields["profit"].grid(row=8, column=0, padx=5, pady=2)
+        fields["profit"].insert(0, str(entry.get("profit", 0)))
+        
+        def save_changes():
+            try:
+                # تحديث البيانات
+                for key in fields:
+                    if key in ["quantity", "price_per_kg", "total_price", "cost_basis", "profit"]:
+                        entry[key] = float(fields[key].get())
+                    else:
+                        entry[key] = fields[key].get()
+                
+                # تحديث العرض
+                self.tree.item(selected_item, values=(
+                    entry.get("date"), entry.get("operation"), entry.get("metal"), entry.get("quantity"),
+                    entry.get("price_per_kg"), entry.get("total_price"), entry.get("person"),
+                    entry.get("cost_basis",""), entry.get("profit","")
+                ))
+                
+                # حفظ التغييرات في الملف
+                app = self.top.master.master  # الوصول إلى التطبيق الرئيسي
+                save_data(app.data)
+                make_backup(app.data)
+                
+                messagebox.showinfo("تم", "تم تعديل السجل بنجاح.")
+                edit_window.destroy()
+            except ValueError:
+                messagebox.showerror("خطأ", "يرجى إدخال قيم صحيحة.")
+        
+        ttk.Button(edit_window, text="حفظ", command=save_changes).grid(row=9, column=0, pady=10)
+        ttk.Button(edit_window, text="إلغاء", command=edit_window.destroy).grid(row=9, column=1, pady=10)
 
 if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
-
-
-
