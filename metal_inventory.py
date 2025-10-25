@@ -16,6 +16,7 @@
  - نافذة لتعديل سجل العمليات
  - دعم الوضع المظلم والفاتح
  - استخدام ألوان زاهية ولامعة
+ - تصميم أنيق وسلس مثل تطبيقات أبل
 """
 
 import os
@@ -206,33 +207,107 @@ class MetalInventoryApp(tk.Tk):
         if self.dark_mode:
             # الوضع المظلم
             self.style.theme_use("clam")
-            self.style.configure("TFrame", background="#2c2c2c")
-            self.style.configure("TLabel", background="#2c2c2c", foreground="#ffffff")
-            self.style.configure("TButton", background="#444444", foreground="#ffffff")
-            self.style.configure("Treeview", background="#333333", foreground="#ffffff", fieldbackground="#333333")
-            self.style.configure("Treeview.Heading", background="#555555", foreground="#ffffff")
-            self.style.map("TButton", background=[("active", "#555555")])
-            self.style.configure("TEntry", fieldbackground="#444444", foreground="#ffffff")
-            self.style.configure("TCombobox", fieldbackground="#444444", foreground="#ffffff")
-            self.style.map("TCombobox", fieldbackground=[("readonly", "#444444")])
+            
+            # تعديلات لونية
+            self.style.configure("TFrame", background="#1e1e1e")
+            self.style.configure("TLabel", background="#1e1e1e", foreground="#ffffff")
+            self.style.configure("TButton", 
+                                background="#3a3a3a", 
+                                foreground="#ffffff",
+                                borderwidth=0,
+                                focuscolor="none",
+                                padding=(10, 5))
+            self.style.map("TButton", 
+                          background=[("active", "#4a4a4a")],
+                          relief=[("pressed", "sunken")])
+            self.style.configure("Treeview", 
+                                background="#252526", 
+                                foreground="#ffffff", 
+                                fieldbackground="#252526",
+                                borderwidth=0,
+                                relief="flat")
+            self.style.configure("Treeview.Heading", 
+                                background="#333333", 
+                                foreground="#ffffff",
+                                borderwidth=0,
+                                relief="flat",
+                                padding=(5, 5))
+            self.style.map("Treeview.Heading", 
+                          background=[("active", "#3a3a3a")])
+            self.style.configure("TEntry", 
+                                fieldbackground="#2d2d2d", 
+                                foreground="#ffffff",
+                                borderwidth=0,
+                                relief="flat",
+                                insertcolor="#ffffff")
+            self.style.configure("TCombobox", 
+                                fieldbackground="#2d2d2d", 
+                                foreground="#ffffff",
+                                borderwidth=0,
+                                relief="flat")
+            self.style.map("TCombobox", 
+                          fieldbackground=[("readonly", "#2d2d2d")],
+                          selectbackground=[("!focus", "#2d2d2d")],
+                          selectforeground=[("!focus", "#ffffff")])
+            self.style.configure("TScrollbar", 
+                                background="#3c3c3c", 
+                                troughcolor="#2a2a2a",
+                                borderwidth=0)
             
             # تعيين لون خلفية النافذة الرئيسية
-            self.configure(bg="#2c2c2c")
+            self.configure(bg="#1e1e1e")
         else:
             # الوضع الفاتح
             self.style.theme_use("clam")
-            self.style.configure("TFrame", background="#f0f0f0")
-            self.style.configure("TLabel", background="#f0f0f0", foreground="#000000")
-            self.style.configure("TButton", background="#0078d7", foreground="#ffffff")
-            self.style.configure("Treeview", background="#ffffff", foreground="#000000", fieldbackground="#ffffff")
-            self.style.configure("Treeview.Heading", background="#0078d7", foreground="#ffffff")
-            self.style.map("TButton", background=[("active", "#106ebe")])
-            self.style.configure("TEntry", fieldbackground="#ffffff", foreground="#000000")
-            self.style.configure("TCombobox", fieldbackground="#ffffff", foreground="#000000")
-            self.style.map("TCombobox", fieldbackground=[("readonly", "#ffffff")])
+            
+            # تعديلات لونية
+            self.style.configure("TFrame", background="#f8f9fa")
+            self.style.configure("TLabel", background="#f8f9fa", foreground="#212529")
+            self.style.configure("TButton", 
+                                background="#0078d7", 
+                                foreground="#ffffff",
+                                borderwidth=0,
+                                focuscolor="none",
+                                padding=(10, 5))
+            self.style.map("TButton", 
+                          background=[("active", "#106ebe")],
+                          relief=[("pressed", "sunken")])
+            self.style.configure("Treeview", 
+                                background="#ffffff", 
+                                foreground="#212529", 
+                                fieldbackground="#ffffff",
+                                borderwidth=0,
+                                relief="flat")
+            self.style.configure("Treeview.Heading", 
+                                background="#e9ecef", 
+                                foreground="#212529",
+                                borderwidth=0,
+                                relief="flat",
+                                padding=(5, 5))
+            self.style.map("Treeview.Heading", 
+                          background=[("active", "#dee2e6")])
+            self.style.configure("TEntry", 
+                                fieldbackground="#ffffff", 
+                                foreground="#212529",
+                                borderwidth=0,
+                                relief="flat",
+                                insertcolor="#212529")
+            self.style.configure("TCombobox", 
+                                fieldbackground="#ffffff", 
+                                foreground="#212529",
+                                borderwidth=0,
+                                relief="flat")
+            self.style.map("TCombobox", 
+                          fieldbackground=[("readonly", "#ffffff")],
+                          selectbackground=[("!focus", "#ffffff")],
+                          selectforeground=[("!focus", "#212529")])
+            self.style.configure("TScrollbar", 
+                                background="#e9ecef", 
+                                troughcolor="#f8f9fa",
+                                borderwidth=0)
             
             # تعيين لون خلفية النافذة الرئيسية
-            self.configure(bg="#f0f0f0")
+            self.configure(bg="#f8f9fa")
 
     def toggle_theme(self):
         """تبديل بين الوضع المظلم والفاتح"""
@@ -275,7 +350,7 @@ class MetalInventoryApp(tk.Tk):
         self.btn_history = ttk.Button(toolbar_frame, text="🕒 السجل", command=self.open_history_window)
         self.btn_export = ttk.Button(toolbar_frame, text="⬇️ تصدير", command=self.export_data)
         self.btn_import = ttk.Button(toolbar_frame, text="⬆️ استيراد", command=self.import_data)
-        self.btn_theme = ttk.Button(toolbar_frame, text="🌙/☀️ تغيير الوضع", command=self.toggle_theme)
+        self.btn_theme = ttk.Button(toolbar_frame, text="🌙/☀️", command=self.toggle_theme)
 
         # ترتيب الأزرار من اليمين إلى اليسار
         for w in [self.btn_theme, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
