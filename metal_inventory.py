@@ -24,6 +24,8 @@
  - إضافة ميزة موردين/عملاء مع متابعة المبالغ المدفوعة والمطلوبة
  - إضافة قائمة منسدلة للعملاء والموردين السابقين
  - إمكانية عرض سجل المعاملات مع عميل أو مورد عند النقر على اسمه
+ - عند إضافة معدن جديد، يمكن اختيار مورد سابق
+ - حذف المعدن لا يحذف السجلات أو العملاء أو الموردين
 """
 
 import os
@@ -453,7 +455,7 @@ class MetalInventoryApp(tk.Tk):
         btn_existing.pack(pady=5)
 
     def open_add_metal_dialog(self):
-        dialog = AddMetalDialog(self)
+        dialog = AddMetalDialog(self, self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
             name, qty, price, source, paid_amount, due_amount = dialog.result
@@ -607,12 +609,10 @@ class MetalInventoryApp(tk.Tk):
         if not messagebox.askyesno("تأكيد الحذف", f"هل أنت متأكد من حذف المعدن '{metal_name}'؟"):
             return
         
-        # حذف المعدن من البيانات
+        # حذف المعدن من البيانات فقط
         self.data["metals"] = [m for m in self.data["metals"] if m["name"] != metal_name]
         
-        # حذف سجلات المعدن من التاريخ
-        self.data["history"] = [h for h in self.data["history"] if h.get("metal") != metal_name]
-        
+        # لا نحذف السجلات أو الحسابات
         save_data(self.data)
         make_backup(self.data)
         self.refresh_table()
@@ -779,39 +779,73 @@ class MetalInventoryApp(tk.Tk):
 # نوافذ الحوارات
 # ---------------------------------------------------------------------
 class AddMetalDialog:
-    def __init__(self, parent):
+    def __init__(self, parent, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("إضافة معدن جديد")
         top.transient(parent)
         top.grab_set()
+        
+        # قائمة الموردين
+        supplier_names = [name for name, info in parties.items() if info.get("type") == "supplier"]
+        
         ttk.Label(top, text="اسم المعدن:").grid(row=0, column=0, sticky="e")
         self.e_name = ttk.Entry(top, justify="right")
         self.e_name.grid(row=0, column=1, pady=4)
+        
         ttk.Label(top, text="الكمية الابتدائية (كجم):").grid(row=1, column=0, sticky="e")
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=1, column=1, pady=4)
+        
         ttk.Label(top, text="السعر الافتراضي للشراء (جنيه/كجم):").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
+        
         ttk.Label(top, text="اسم المورد:").grid(row=3, column=0, sticky="e")
-        self.e_source = ttk.Entry(top, justify="right")
-        self.e_source.grid(row=3, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.supplier_var = tk.StringVar()
+        self.cmb_supplier = ttk.Combobox(top, values=supplier_names, textvariable=self.supplier_var, justify="right")
+        self.cmb_supplier.grid(row=3, column=1, pady=4)
+        
+        # حقل إدخال المورد الجديد
+        ttk.Label(top, text="أو أدخل مورد جديد:").grid(row=4, column=0, sticky="e")
+        self.e_new_supplier = ttk.Entry(top, justify="right")
+        self.e_new_supplier.grid(row=4, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=5, column=0, sticky="e")
         self.e_paid = ttk.Entry(top, justify="right")
-        self.e_paid.grid(row=4, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_paid.grid(row=5, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=6, column=0, sticky="e")
         self.e_due = ttk.Entry(top, justify="right")
-        self.e_due.grid(row=5, column=1, pady=4)
-        ttk.Button(top, text="حفظ", command=self.on_save).grid(row=6, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
+        self.e_due.grid(row=6, column=1, pady=4)
+        
+        ttk.Button(top, text="حفظ", command=self.on_save).grid(row=7, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=7, column=0, sticky="w", pady=6)
+        
         self.result = None
+    
     def on_save(self):
         name = self.e_name.get().strip()
         qty = self.e_qty.get().strip() or "0"
         price = self.e_price.get().strip()
-        source = self.e_source.get().strip()
+        
+        # تحديد اسم المورد
+        supplier = self.supplier_var.get().strip()
+        new_supplier = self.e_new_supplier.get().strip()
+        
+        if supplier and new_supplier:
+            messagebox.showerror("خطأ", "يرجى تحديد مورد من القائمة أو إدخال مورد جديد، وليس كليهما.")
+            return
+        elif supplier:
+            source = supplier
+        elif new_supplier:
+            source = new_supplier
+        else:
+            messagebox.showerror("خطأ", "يرجى تحديد مورد أو إدخال مورد جديد.")
+            return
+        
         paid = self.e_paid.get().strip() or "0"
         due = self.e_due.get().strip() or "0"
+        
         if not name or not price:
             messagebox.showerror("خطأ", "يرجى إدخال الاسم والسعر.")
             return
@@ -822,6 +856,7 @@ class AddMetalDialog:
             return
         self.result = (name, qty, price, source, float(paid), float(due))
         self.top.destroy()
+    
     def on_cancel(self):
         self.top.destroy()
 
