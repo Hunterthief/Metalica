@@ -17,6 +17,10 @@
  - دعم الوضع المظلم والفاتح
  - استخدام ألوان زاهية ولامعة
  - تصميم أنيق وسلس مثل تطبيقات أبل
+ - تتبع الدفعات الجزئية
+ - صفحات دفتر الأستاذ الفردية للعملاء والموردين
+ - تتبع الربح مع عرض النسب المئوية
+ - سجل موحد للعمليات
 """
 
 import os
@@ -56,6 +60,8 @@ def load_data():
                 d["metals"] = []
             if "history" not in d:
                 d["history"] = []
+            if "parties" not in d:
+                d["parties"] = {}  # لحفظ معلومات العملاء والموردين
             # تحديث البنية إذا كانت قديمة
             for m in d.get("metals", []):
                 if "lots" not in m:
@@ -80,9 +86,9 @@ def load_data():
             return d
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل قراءة ملف البيانات: {e}")
-            return {"metals": [], "history": []}
+            return {"metals": [], "history": [], "parties": {}}
     else:
-        return {"metals": [], "history": []}
+        return {"metals": [], "history": [], "parties": {}}
 
 def save_data(data):
     """حفظ البيانات إلى data.json"""
@@ -176,6 +182,21 @@ def deduct_from_lots(metal, qty_to_remove):
         raise ValueError("الكمية المطلوبة للسحب أكبر من المتوفر.")
     metal["lots"] = new_lots
     return round(cost, 2)
+
+def update_party_balance(parties, party_name, amount, is_credit=True):
+    """تحديث رصيد العميل/المورد"""
+    if party_name not in parties:
+        parties[party_name] = {
+            "balance": 0.0,
+            "transactions": []
+        }
+    
+    # إذا كان الدفع نقدًا أو تم الدفع بالكامل، لا نحتاج لحساب الرصيد
+    if is_credit:
+        parties[party_name]["balance"] = round(parties[party_name]["balance"] + amount, 2)
+    else:
+        # إذا تم دفع جزء من المبلغ، نحسب المبلغ المتبقي
+        parties[party_name]["balance"] = round(parties[party_name]["balance"] - amount, 2)
 
 # ---------------------------------------------------------------------
 # التطبيق الرئيسي
@@ -350,10 +371,11 @@ class MetalInventoryApp(tk.Tk):
         self.btn_history = ttk.Button(toolbar_frame, text="🕒 السجل", command=self.open_history_window)
         self.btn_export = ttk.Button(toolbar_frame, text="⬇️ تصدير", command=self.export_data)
         self.btn_import = ttk.Button(toolbar_frame, text="⬆️ استيراد", command=self.import_data)
+        self.btn_parties = ttk.Button(toolbar_frame, text="👥 الحسابات", command=self.open_parties_window)
         self.btn_theme = ttk.Button(toolbar_frame, text="🌙/☀️", command=self.toggle_theme)
 
         # ترتيب الأزرار من اليمين إلى اليسار
-        for w in [self.btn_theme, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
+        for w in [self.btn_theme, self.btn_parties, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
                   self.btn_remove_stock, self.btn_add_stock, self.btn_add_metal]:
             w.pack(side=tk.RIGHT, padx=3)
 
@@ -459,7 +481,9 @@ class MetalInventoryApp(tk.Tk):
                 "quantity": float(qty),
                 "price_per_kg": float(price),
                 "total_price": round(float(qty)*float(price),2),
-                "person": source
+                "person": source,
+                "paid_amount": round(float(qty)*float(price),2),  # المبلغ المدفوع
+                "due_amount": 0.0  # المبلغ المتبقي
             })
             save_data(self.data)
             make_backup(self.data)
@@ -494,7 +518,9 @@ class MetalInventoryApp(tk.Tk):
                 "quantity": qty,
                 "price_per_kg": buy_price,
                 "total_price": total_paid,
-                "person": source
+                "person": source,
+                "paid_amount": total_paid,  # المبلغ المدفوع
+                "due_amount": 0.0  # المبلغ المتبقي
             })
             save_data(self.data)
             make_backup(self.data)
@@ -504,7 +530,7 @@ class MetalInventoryApp(tk.Tk):
         dialog = RemoveStockDialog(self, self.data.get("metals", []))
         self.wait_window(dialog.top)
         if dialog.result:
-            name, qty, sale_price, person = dialog.result
+            name, qty, sale_price, person, paid_amount, due_amount = dialog.result
             metal = next((m for m in self.data["metals"] if m["name"]==name), None)
             if not metal:
                 messagebox.showerror("خطأ", "المعدن غير موجود.")
@@ -523,6 +549,10 @@ class MetalInventoryApp(tk.Tk):
             profit = round(revenue - cost_basis, 2)
             metal["profit_total"] = round(metal.get("profit_total", 0.0) + profit, 2)
             metal["last_updated"] = now_iso()
+            
+            # حساب النسبة المئوية للربح
+            profit_percentage = round((profit / revenue * 100) if revenue > 0 else 0, 2)
+            
             self.data["history"].append({
                 "date": now_iso(),
                 "operation": "بيع / سحب كمية",
@@ -532,8 +562,15 @@ class MetalInventoryApp(tk.Tk):
                 "total_price": revenue,
                 "person": person,
                 "cost_basis": cost_basis,
-                "profit": profit
+                "profit": profit,
+                "profit_percentage": profit_percentage,
+                "paid_amount": paid_amount,
+                "due_amount": due_amount
             })
+            
+            # تحديث رصيد العميل/المورد
+            update_party_balance(self.data["parties"], person, due_amount, True)
+            
             save_data(self.data)
             make_backup(self.data)
             self.refresh_table()
@@ -563,6 +600,9 @@ class MetalInventoryApp(tk.Tk):
     def open_history_window(self):
         HistoryWindow(self, self.data.get("history", []))
 
+    def open_parties_window(self):
+        PartiesWindow(self, self.data.get("parties", {}))
+
     def export_data(self):
         path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")], title="حفظ البيانات كـ JSON")
         if not path:
@@ -583,7 +623,7 @@ class MetalInventoryApp(tk.Tk):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 d = json.load(f)
-            if "metals" in d and "history" in d:
+            if "metals" in d and "history" in d and "parties" in d:
                 self.data = d
                 save_data(self.data)
                 make_backup(self.data)
@@ -816,23 +856,31 @@ class RemoveStockDialog:
         ttk.Label(top, text="الطرف (عميل/ملاحظة):").grid(row=3, column=0, sticky="e")
         self.e_person = ttk.Entry(top, justify="right")
         self.e_person.grid(row=3, column=1, pady=4)
-        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=4, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=4, column=0, sticky="w", pady=6)
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.e_paid = ttk.Entry(top, justify="right")
+        self.e_paid.grid(row=4, column=1, pady=4)
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_due = ttk.Entry(top, justify="right")
+        self.e_due.grid(row=5, column=1, pady=4)
+        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=6, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
         self.result = None
     def on_ok(self):
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
         price = self.e_price.get().strip()
         person = self.e_person.get().strip()
+        paid = self.e_paid.get().strip() or "0"
+        due = self.e_due.get().strip() or "0"
         if not name or not qty or not price:
             messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة.")
             return
         try:
-            float(qty); float(price)
+            float(qty); float(price); float(paid); float(due)
         except:
             messagebox.showerror("خطأ", "قيمة رقمية خاطئة.")
             return
-        self.result = (name, qty, float(price), person)
+        self.result = (name, qty, float(price), person, float(paid), float(due))
         self.top.destroy()
     def on_cancel(self):
         self.top.destroy()
@@ -858,7 +906,7 @@ class HistoryWindow:
         ttk.Button(tool_frame, text="تعديل سجل", command=lambda: self.edit_history_entry(history)).pack(side=tk.LEFT, padx=4)
         
         # جدول السجل
-        cols = ("date","operation","metal","quantity","price_per_kg","total_price","person","cost_basis","profit")
+        cols = ("date","operation","metal","quantity","price_per_kg","total_price","person","paid_amount","due_amount","cost_basis","profit","profit_percentage")
         headers_ar = {
             "date":"التاريخ",
             "operation":"العملية",
@@ -867,8 +915,11 @@ class HistoryWindow:
             "price_per_kg":"السعر لكل كجم",
             "total_price":"القيمة الإجمالية",
             "person":"الطرف",
+            "paid_amount":"المبلغ المدفوع",
+            "due_amount":"المبلغ المتبقي",
             "cost_basis":"تكلفة الشراء",
-            "profit":"الربح"
+            "profit":"الربح",
+            "profit_percentage":"نسبة الربح (%)"
         }
         tree_frame = ttk.Frame(top)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
@@ -890,7 +941,8 @@ class HistoryWindow:
             self.tree.insert("", "end", iid=i, values=(
                 h.get("date"), h.get("operation"), h.get("metal"), h.get("quantity"),
                 h.get("price_per_kg"), h.get("total_price"), h.get("person"),
-                h.get("cost_basis",""), h.get("profit","")
+                h.get("paid_amount",""), h.get("due_amount",""), h.get("cost_basis",""), 
+                h.get("profit",""), h.get("profit_percentage","")
             ))
     
     def export_csv(self, history):
@@ -900,9 +952,9 @@ class HistoryWindow:
         try:
             with open(path, "w", encoding="utf-8", newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(["التاريخ","العملية","المعدن","الكمية","السعر لكل كجم","القيمة الإجمالية","الطرف","تكلفة الشراء","الربح"])
+                writer.writerow(["التاريخ","العملية","المعدن","الكمية","السعر لكل كجم","القيمة الإجمالية","الطرف","المبلغ المدفوع","المبلغ المتبقي","تكلفة الشراء","الربح","نسبة الربح (%)"])
                 for h in history:
-                    writer.writerow([h.get("date"),h.get("operation"),h.get("metal"),h.get("quantity"),h.get("price_per_kg"),h.get("total_price"),h.get("person"),h.get("cost_basis",""),h.get("profit","")])
+                    writer.writerow([h.get("date"),h.get("operation"),h.get("metal"),h.get("quantity"),h.get("price_per_kg"),h.get("total_price"),h.get("person"),h.get("paid_amount",""),h.get("due_amount",""),h.get("cost_basis",""),h.get("profit",""),h.get("profit_percentage","")])
             messagebox.showinfo("تم", "تم تصدير السجل CSV.")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل التصدير: {e}")
@@ -971,21 +1023,36 @@ class HistoryWindow:
         fields["person"].grid(row=6, column=0, padx=5, pady=2)
         fields["person"].insert(0, entry.get("person", ""))
         
-        ttk.Label(edit_window, text="تكلفة الشراء:").grid(row=7, column=1, sticky="e")
+        ttk.Label(edit_window, text="المبلغ المدفوع:").grid(row=7, column=1, sticky="e")
+        fields["paid_amount"] = ttk.Entry(edit_window, justify="right")
+        fields["paid_amount"].grid(row=7, column=0, padx=5, pady=2)
+        fields["paid_amount"].insert(0, str(entry.get("paid_amount", 0)))
+        
+        ttk.Label(edit_window, text="المبلغ المتبقي:").grid(row=8, column=1, sticky="e")
+        fields["due_amount"] = ttk.Entry(edit_window, justify="right")
+        fields["due_amount"].grid(row=8, column=0, padx=5, pady=2)
+        fields["due_amount"].insert(0, str(entry.get("due_amount", 0)))
+        
+        ttk.Label(edit_window, text="تكلفة الشراء:").grid(row=9, column=1, sticky="e")
         fields["cost_basis"] = ttk.Entry(edit_window, justify="right")
-        fields["cost_basis"].grid(row=7, column=0, padx=5, pady=2)
+        fields["cost_basis"].grid(row=9, column=0, padx=5, pady=2)
         fields["cost_basis"].insert(0, str(entry.get("cost_basis", 0)))
         
-        ttk.Label(edit_window, text="الربح:").grid(row=8, column=1, sticky="e")
+        ttk.Label(edit_window, text="الربح:").grid(row=10, column=1, sticky="e")
         fields["profit"] = ttk.Entry(edit_window, justify="right")
-        fields["profit"].grid(row=8, column=0, padx=5, pady=2)
+        fields["profit"].grid(row=10, column=0, padx=5, pady=2)
         fields["profit"].insert(0, str(entry.get("profit", 0)))
+        
+        ttk.Label(edit_window, text="نسبة الربح (%):").grid(row=11, column=1, sticky="e")
+        fields["profit_percentage"] = ttk.Entry(edit_window, justify="right")
+        fields["profit_percentage"].grid(row=11, column=0, padx=5, pady=2)
+        fields["profit_percentage"].insert(0, str(entry.get("profit_percentage", 0)))
         
         def save_changes():
             try:
                 # تحديث البيانات
                 for key in fields:
-                    if key in ["quantity", "price_per_kg", "total_price", "cost_basis", "profit"]:
+                    if key in ["quantity", "price_per_kg", "total_price", "paid_amount", "due_amount", "cost_basis", "profit", "profit_percentage"]:
                         entry[key] = float(fields[key].get())
                     else:
                         entry[key] = fields[key].get()
@@ -994,7 +1061,8 @@ class HistoryWindow:
                 self.tree.item(selected_item, values=(
                     entry.get("date"), entry.get("operation"), entry.get("metal"), entry.get("quantity"),
                     entry.get("price_per_kg"), entry.get("total_price"), entry.get("person"),
-                    entry.get("cost_basis",""), entry.get("profit","")
+                    entry.get("paid_amount",""), entry.get("due_amount",""), entry.get("cost_basis",""), 
+                    entry.get("profit",""), entry.get("profit_percentage","")
                 ))
                 
                 # حفظ التغييرات في الملف
@@ -1007,8 +1075,137 @@ class HistoryWindow:
             except ValueError:
                 messagebox.showerror("خطأ", "يرجى إدخال قيم صحيحة.")
         
-        ttk.Button(edit_window, text="حفظ", command=save_changes).grid(row=9, column=0, pady=10)
-        ttk.Button(edit_window, text="إلغاء", command=edit_window.destroy).grid(row=9, column=1, pady=10)
+        ttk.Button(edit_window, text="حفظ", command=save_changes).grid(row=12, column=0, pady=10)
+        ttk.Button(edit_window, text="إلغاء", command=edit_window.destroy).grid(row=12, column=1, pady=10)
+
+class PartiesWindow:
+    def __init__(self, parent, parties):
+        top = self.top = tk.Toplevel(parent)
+        top.title("الحسابات - Metalica")
+        try:
+            top.state("zoomed")
+        except:
+            try:
+                top.attributes("-zoomed", True)
+            except:
+                pass
+        top.geometry("900x600")
+        
+        # إطار الأدوات
+        tool_frame = ttk.Frame(top)
+        tool_frame.pack(fill=tk.X, padx=6, pady=6)
+        ttk.Button(tool_frame, text="إضافة حساب", command=self.add_party).pack(side=tk.LEFT, padx=4)
+        ttk.Button(tool_frame, text="تصدير CSV", command=lambda: self.export_csv(parties)).pack(side=tk.LEFT, padx=4)
+        
+        # جدول الحسابات
+        cols = ("name","balance","transaction_count")
+        headers_ar = {
+            "name":"الاسم",
+            "balance":"الرصيد",
+            "transaction_count":"عدد المعاملات"
+        }
+        tree_frame = ttk.Frame(top)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        
+        self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=15)
+        for c in cols:
+            self.tree.heading(c, text=headers_ar.get(c,c))
+            self.tree.column(c, anchor="center", width=150)
+        
+        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscroll=vsb.set, xscroll=hsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        # ملء الجدول
+        for name, info in parties.items():
+            self.tree.insert("", "end", iid=name, values=(name, info.get("balance", 0.0), len(info.get("transactions", []))))
+        
+        self.tree.bind("<Double-1>", self.on_party_select)
+        self.parties = parties
+        self.parent = parent
+    
+    def on_party_select(self, event):
+        item = self.tree.focus()
+        if not item:
+            return
+        name = item
+        party_info = self.parties.get(name, {})
+        self.show_party_details(name, party_info)
+    
+    def show_party_details(self, name, party_info):
+        top = tk.Toplevel(self.top)
+        top.title(f"تفاصيل الحساب - {name}")
+        try:
+            top.state("zoomed")
+        except:
+            try:
+                top.attributes("-zoomed", True)
+            except:
+                pass
+        frm = ttk.Frame(top, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(frm, text=f"الاسم: {name}").grid(row=0, column=0, sticky="w")
+        ttk.Label(frm, text=f"الرصيد: {party_info.get('balance', 0.0)} جنيه").grid(row=1, column=0, sticky="w")
+        ttk.Label(frm, text=f"عدد المعاملات: {len(party_info.get('transactions', []))}").grid(row=2, column=0, sticky="w")
+        
+        cols = ("date","operation","metal","quantity","total_price","paid_amount","due_amount","profit")
+        headers_ar = {
+            "date":"التاريخ",
+            "operation":"العملية",
+            "metal":"المعدن",
+            "quantity":"الكمية",
+            "total_price":"القيمة الإجمالية",
+            "paid_amount":"المبلغ المدفوع",
+            "due_amount":"المبلغ المتبقي",
+            "profit":"الربح"
+        }
+        tree = ttk.Treeview(frm, columns=cols, show="headings", height=10)
+        for c in cols:
+            tree.heading(c, text=headers_ar.get(c,c))
+            tree.column(c, anchor="center", width=100)
+        tree.grid(row=3, column=0, columnspan=3, pady=8, sticky="nsew")
+        
+        for trans in party_info.get("transactions", []):
+            tree.insert("", "end", values=(
+                trans.get("date"), trans.get("operation"), trans.get("metal"), trans.get("quantity"),
+                trans.get("total_price"), trans.get("paid_amount"), trans.get("due_amount"), trans.get("profit")
+            ))
+        
+        btn_frame = ttk.Frame(frm)
+        btn_frame.grid(row=4, column=0, pady=8, sticky="w")
+        ttk.Button(btn_frame, text="إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
+    
+    def add_party(self):
+        name = tk.simpledialog.askstring("إضافة حساب", "اسم الحساب:")
+        if name and name.strip():
+            if name.strip() in self.parties:
+                messagebox.showwarning("تحذير", "الحساب موجود مسبقًا.")
+                return
+            self.parties[name.strip()] = {
+                "balance": 0.0,
+                "transactions": []
+            }
+            self.tree.insert("", "end", iid=name.strip(), values=(name.strip(), 0.0, 0))
+            save_data(self.parent.data)
+            make_backup(self.parent.data)
+    
+    def export_csv(self, parties):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["الاسم","الرصيد","عدد المعاملات"])
+                for name, info in parties.items():
+                    writer.writerow([name, info.get("balance", 0.0), len(info.get("transactions", []))])
+            messagebox.showinfo("تم", "تم تصدير الحسابات CSV.")
+        except Exception as e:
+            messagebox.showerror("خطأ", f"فشل التصدير: {e}")
 
 if __name__ == "__main__":
     app = MetalInventoryApp()
