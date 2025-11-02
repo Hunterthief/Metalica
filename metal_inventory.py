@@ -21,6 +21,7 @@
  - صفحات دفتر الأستاذ الفردية للعملاء والموردين
  - تتبع الربح مع عرض النسب المئوية
  - سجل موحد للعمليات
+ - إضافة ميزة موردين/عملاء مع متابعة المبالغ المدفوعة والمطلوبة
 """
 
 import os
@@ -183,19 +184,20 @@ def deduct_from_lots(metal, qty_to_remove):
     metal["lots"] = new_lots
     return round(cost, 2)
 
-def update_party_balance(parties, party_name, amount, is_credit=True):
+def update_party_balance(parties, party_name, amount, transaction_type, is_supplier=False):
     """تحديث رصيد العميل/المورد"""
     if party_name not in parties:
         parties[party_name] = {
             "balance": 0.0,
-            "transactions": []
+            "transactions": [],
+            "type": "supplier" if is_supplier else "customer"
         }
     
-    # إذا كان الدفع نقدًا أو تم الدفع بالكامل، لا نحتاج لحساب الرصيد
-    if is_credit:
+    # إذا كانت معاملة شراء (من مورد)، نضيف المبلغ إلى الرصيد
+    if is_supplier:
         parties[party_name]["balance"] = round(parties[party_name]["balance"] + amount, 2)
+    # إذا كانت معاملة بيع (لعميل)، نطرح المبلغ من الرصيد
     else:
-        # إذا تم دفع جزء من المبلغ، نحسب المبلغ المتبقي
         parties[party_name]["balance"] = round(parties[party_name]["balance"] - amount, 2)
 
 # ---------------------------------------------------------------------
@@ -416,7 +418,7 @@ class MetalInventoryApp(tk.Tk):
         status_frame = ttk.Frame(self)
         status_frame.pack(fill=tk.X, padx=10, pady=5)
         self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون (سعر الشراء): 0 جنيه")
-        self.total_profit_label = ttk.Label(status_frame, text="إجمالي الربح: 0 جنيه")
+        self.total_profit_label = ttk.Label(status_frame, text="إجمالي الربح: 0 جنيه (0.0%)")
         self.last_backup_label = ttk.Label(status_frame, text="آخر نسخة احتياطية: -")
 
         self.total_profit_label.pack(side=tk.LEFT, padx=8)
@@ -452,7 +454,7 @@ class MetalInventoryApp(tk.Tk):
         dialog = AddMetalDialog(self)
         self.wait_window(dialog.top)
         if dialog.result:
-            name, qty, price, source = dialog.result
+            name, qty, price, source, paid_amount, due_amount = dialog.result
             existing = next((m for m in self.data["metals"] if m["name"]==name), None)
             if existing:
                 messagebox.showwarning("تحذير", "هذا المعدن موجود مسبقًا.")
@@ -474,17 +476,26 @@ class MetalInventoryApp(tk.Tk):
                     "date": now_iso()
                 })
             self.data["metals"].append(m)
+            
+            # حساب المبلغ الإجمالي
+            total_amount = round(float(qty) * float(price), 2)
+            
             self.data["history"].append({
                 "date": now_iso(),
                 "operation": "إضافة معدن جديد",
                 "metal": name,
                 "quantity": float(qty),
                 "price_per_kg": float(price),
-                "total_price": round(float(qty)*float(price),2),
+                "total_price": total_amount,
                 "person": source,
-                "paid_amount": round(float(qty)*float(price),2),  # المبلغ المدفوع
-                "due_amount": 0.0  # المبلغ المتبقي
+                "paid_amount": paid_amount,  # المبلغ المدفوع
+                "due_amount": due_amount,    # المبلغ المتبقي
+                "transaction_type": "purchase"  # نوع المعاملة
             })
+            
+            # تحديث رصيد المورد
+            update_party_balance(self.data["parties"], source, due_amount, "purchase", is_supplier=True)
+            
             save_data(self.data)
             make_backup(self.data)
             self.refresh_table()
@@ -493,7 +504,7 @@ class MetalInventoryApp(tk.Tk):
         dialog = AddStockDialog(self, self.data.get("metals", []))
         self.wait_window(dialog.top)
         if dialog.result:
-            name, qty, buy_price, source = dialog.result
+            name, qty, buy_price, source, paid_amount, due_amount = dialog.result
             metal = next((m for m in self.data["metals"] if m["name"]==name), None)
             if not metal:
                 messagebox.showerror("خطأ", "المعدن غير موجود.")
@@ -503,25 +514,32 @@ class MetalInventoryApp(tk.Tk):
                 buy_price = float(metal.get("price_per_kg", 0.0))
             else:
                 buy_price = float(buy_price)
-            total_paid = round(qty * buy_price, 2)
+            
+            total_amount = round(qty * buy_price, 2)
             metal["lots"].append({
                 "source": source or "مصدر افتراضي",
                 "quantity": qty,
-                "total_paid": total_paid,
+                "total_paid": total_amount,  # المبلغ الإجمالي
                 "date": now_iso()
             })
             metal["last_updated"] = now_iso()
+            
             self.data["history"].append({
                 "date": now_iso(),
                 "operation": "إضافة كمية",
                 "metal": name,
                 "quantity": qty,
                 "price_per_kg": buy_price,
-                "total_price": total_paid,
+                "total_price": total_amount,
                 "person": source,
-                "paid_amount": total_paid,  # المبلغ المدفوع
-                "due_amount": 0.0  # المبلغ المتبقي
+                "paid_amount": paid_amount,  # المبلغ المدفوع
+                "due_amount": due_amount,    # المبلغ المتبقي
+                "transaction_type": "purchase"  # نوع المعاملة
             })
+            
+            # تحديث رصيد المورد
+            update_party_balance(self.data["parties"], source, due_amount, "purchase", is_supplier=True)
+            
             save_data(self.data)
             make_backup(self.data)
             self.refresh_table()
@@ -547,11 +565,11 @@ class MetalInventoryApp(tk.Tk):
                 messagebox.showerror("خطأ", f"خطأ في خصم الكمية: {e}")
                 return
             profit = round(revenue - cost_basis, 2)
+            profit_percentage = round((profit / revenue * 100) if revenue > 0 else 0, 2)
             metal["profit_total"] = round(metal.get("profit_total", 0.0) + profit, 2)
             metal["last_updated"] = now_iso()
             
-            # حساب النسبة المئوية للربح
-            profit_percentage = round((profit / revenue * 100) if revenue > 0 else 0, 2)
+            total_amount = round(qty * float(sale_price), 2)
             
             self.data["history"].append({
                 "date": now_iso(),
@@ -565,11 +583,12 @@ class MetalInventoryApp(tk.Tk):
                 "profit": profit,
                 "profit_percentage": profit_percentage,
                 "paid_amount": paid_amount,
-                "due_amount": due_amount
+                "due_amount": due_amount,
+                "transaction_type": "sale"
             })
             
-            # تحديث رصيد العميل/المورد
-            update_party_balance(self.data["parties"], person, due_amount, True)
+            # تحديث رصيد العميل
+            update_party_balance(self.data["parties"], person, due_amount, "sale", is_supplier=False)
             
             save_data(self.data)
             make_backup(self.data)
@@ -643,6 +662,7 @@ class MetalInventoryApp(tk.Tk):
             self.tree.delete(i)
         total_value = 0.0
         total_profit = 0.0
+        total_revenue = 0.0
         for m in self.data.get("metals", []):
             name = m.get("name","")
             if q and q not in name:
@@ -655,8 +675,16 @@ class MetalInventoryApp(tk.Tk):
             last = m.get("last_updated","")
             sources_count = len(m.get("lots", []))
             self.tree.insert("", "end", iid=name, values=(name, qty, m.get("price_per_kg",0.0), value, last, sources_count))
+        
+        # حساب إجمالي الأرباح ونسبة الربح
+        for h in self.data.get("history", []):
+            if h.get("transaction_type") == "sale":
+                total_revenue += h.get("total_price", 0)
+        
+        profit_percentage = round((total_profit / total_revenue * 100) if total_revenue > 0 else 0, 2)
+        
         self.total_value_label.config(text=f"إجمالي قيمة المخزون (سعر الشراء): {round(total_value,2)} جنيه")
-        self.total_profit_label.config(text=f"إجمالي الربح: {round(total_profit,2)} جنيه")
+        self.total_profit_label.config(text=f"إجمالي الربح: {round(total_profit,2)} جنيه ({profit_percentage}%)")
         backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_")])
         last = backups[-1] if backups else "-"
         self.last_backup_label.config(text=f"آخر نسخة احتياطية: {last}")
@@ -763,26 +791,34 @@ class AddMetalDialog:
         ttk.Label(top, text="السعر الافتراضي للشراء (جنيه/كجم):").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
-        ttk.Label(top, text="اسم المورد (اختياري):").grid(row=3, column=0, sticky="e")
+        ttk.Label(top, text="اسم المورد:").grid(row=3, column=0, sticky="e")
         self.e_source = ttk.Entry(top, justify="right")
         self.e_source.grid(row=3, column=1, pady=4)
-        ttk.Button(top, text="حفظ", command=self.on_save).grid(row=4, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=4, column=0, sticky="w", pady=6)
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.e_paid = ttk.Entry(top, justify="right")
+        self.e_paid.grid(row=4, column=1, pady=4)
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_due = ttk.Entry(top, justify="right")
+        self.e_due.grid(row=5, column=1, pady=4)
+        ttk.Button(top, text="حفظ", command=self.on_save).grid(row=6, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
         self.result = None
     def on_save(self):
         name = self.e_name.get().strip()
         qty = self.e_qty.get().strip() or "0"
         price = self.e_price.get().strip()
         source = self.e_source.get().strip()
+        paid = self.e_paid.get().strip() or "0"
+        due = self.e_due.get().strip() or "0"
         if not name or not price:
             messagebox.showerror("خطأ", "يرجى إدخال الاسم والسعر.")
             return
         try:
-            float(qty); float(price)
+            float(qty); float(price); float(paid); float(due)
         except:
             messagebox.showerror("خطأ", "قيمة رقمية غير صحيحة.")
             return
-        self.result = (name, qty, price, source)
+        self.result = (name, qty, price, source, float(paid), float(due))
         self.top.destroy()
     def on_cancel(self):
         self.top.destroy()
@@ -803,33 +839,37 @@ class AddStockDialog:
         ttk.Label(top, text="الكمية (كجم):").grid(row=1, column=0, sticky="e")
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=1, column=1, pady=4)
-        ttk.Label(top, text="سعر الشراء لكل كجم (اتركه فارغاً لاستخدام السعر الافتراضي):").grid(row=2, column=0, sticky="e")
+        ttk.Label(top, text="سعر الشراء لكل كجم:").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
         ttk.Label(top, text="اسم المورد:").grid(row=3, column=0, sticky="e")
         self.e_source = ttk.Entry(top, justify="right")
         self.e_source.grid(row=3, column=1, pady=4)
-        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=4, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=4, column=0, sticky="w", pady=6)
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.e_paid = ttk.Entry(top, justify="right")
+        self.e_paid.grid(row=4, column=1, pady=4)
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_due = ttk.Entry(top, justify="right")
+        self.e_due.grid(row=5, column=1, pady=4)
+        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=6, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
         self.result = None
     def on_ok(self):
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
         price = self.e_price.get().strip()
         source = self.e_source.get().strip()
-        if not name or not qty:
-            messagebox.showerror("خطأ", "يرجى ملء الحقول المطلوبة.")
+        paid = self.e_paid.get().strip() or "0"
+        due = self.e_due.get().strip() or "0"
+        if not name or not qty or not price:
+            messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة.")
             return
         try:
-            float(qty)
-            if price:
-                float(price)
-            else:
-                price = None
+            float(qty); float(price); float(paid); float(due)
         except:
             messagebox.showerror("خطأ", "قيمة رقمية خاطئة.")
             return
-        self.result = (name, qty, price, source)
+        self.result = (name, qty, float(price), source, float(paid), float(due))
         self.top.destroy()
     def on_cancel(self):
         self.top.destroy()
@@ -853,7 +893,7 @@ class RemoveStockDialog:
         ttk.Label(top, text="سعر البيع لكل كجم (جنيه):").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
-        ttk.Label(top, text="الطرف (عميل/ملاحظة):").grid(row=3, column=0, sticky="e")
+        ttk.Label(top, text="العميل:").grid(row=3, column=0, sticky="e")
         self.e_person = ttk.Entry(top, justify="right")
         self.e_person.grid(row=3, column=1, pady=4)
         ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
@@ -1098,9 +1138,10 @@ class PartiesWindow:
         ttk.Button(tool_frame, text="تصدير CSV", command=lambda: self.export_csv(parties)).pack(side=tk.LEFT, padx=4)
         
         # جدول الحسابات
-        cols = ("name","balance","transaction_count")
+        cols = ("name","type","balance","transaction_count")
         headers_ar = {
             "name":"الاسم",
+            "type":"النوع",
             "balance":"الرصيد",
             "transaction_count":"عدد المعاملات"
         }
@@ -1121,7 +1162,8 @@ class PartiesWindow:
         
         # ملء الجدول
         for name, info in parties.items():
-            self.tree.insert("", "end", iid=name, values=(name, info.get("balance", 0.0), len(info.get("transactions", []))))
+            party_type = "مورد" if info.get("type") == "supplier" else "عميل"
+            self.tree.insert("", "end", iid=name, values=(name, party_type, info.get("balance", 0.0), len(info.get("transactions", []))))
         
         self.tree.bind("<Double-1>", self.on_party_select)
         self.parties = parties
@@ -1149,8 +1191,10 @@ class PartiesWindow:
         frm.pack(fill=tk.BOTH, expand=True)
         
         ttk.Label(frm, text=f"الاسم: {name}").grid(row=0, column=0, sticky="w")
-        ttk.Label(frm, text=f"الرصيد: {party_info.get('balance', 0.0)} جنيه").grid(row=1, column=0, sticky="w")
-        ttk.Label(frm, text=f"عدد المعاملات: {len(party_info.get('transactions', []))}").grid(row=2, column=0, sticky="w")
+        party_type = "مورد" if party_info.get("type") == "supplier" else "عميل"
+        ttk.Label(frm, text=f"النوع: {party_type}").grid(row=1, column=0, sticky="w")
+        ttk.Label(frm, text=f"الرصيد: {party_info.get('balance', 0.0)} جنيه").grid(row=2, column=0, sticky="w")
+        ttk.Label(frm, text=f"عدد المعاملات: {len(party_info.get('transactions', []))}").grid(row=3, column=0, sticky="w")
         
         cols = ("date","operation","metal","quantity","total_price","paid_amount","due_amount","profit")
         headers_ar = {
@@ -1167,7 +1211,7 @@ class PartiesWindow:
         for c in cols:
             tree.heading(c, text=headers_ar.get(c,c))
             tree.column(c, anchor="center", width=100)
-        tree.grid(row=3, column=0, columnspan=3, pady=8, sticky="nsew")
+        tree.grid(row=4, column=0, columnspan=3, pady=8, sticky="nsew")
         
         for trans in party_info.get("transactions", []):
             tree.insert("", "end", values=(
@@ -1176,7 +1220,7 @@ class PartiesWindow:
             ))
         
         btn_frame = ttk.Frame(frm)
-        btn_frame.grid(row=4, column=0, pady=8, sticky="w")
+        btn_frame.grid(row=5, column=0, pady=8, sticky="w")
         ttk.Button(btn_frame, text="إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
     
     def add_party(self):
@@ -1185,13 +1229,20 @@ class PartiesWindow:
             if name.strip() in self.parties:
                 messagebox.showwarning("تحذير", "الحساب موجود مسبقًا.")
                 return
-            self.parties[name.strip()] = {
-                "balance": 0.0,
-                "transactions": []
-            }
-            self.tree.insert("", "end", iid=name.strip(), values=(name.strip(), 0.0, 0))
-            save_data(self.parent.data)
-            make_backup(self.parent.data)
+            party_type = tk.simpledialog.askstring("نوع الحساب", "أدخل 'مورد' أو 'عميل':")
+            if party_type and party_type.strip().lower() in ['مورد', 'عميل']:
+                is_supplier = party_type.strip().lower() == 'مورد'
+                self.parties[name.strip()] = {
+                    "balance": 0.0,
+                    "transactions": [],
+                    "type": "supplier" if is_supplier else "customer"
+                }
+                party_type_ar = "مورد" if is_supplier else "عميل"
+                self.tree.insert("", "end", iid=name.strip(), values=(name.strip(), party_type_ar, 0.0, 0))
+                save_data(self.parent.data)
+                make_backup(self.parent.data)
+            else:
+                messagebox.showerror("خطأ", "يرجى إدخال نوع الحساب بشكل صحيح (مورد أو عميل).")
     
     def export_csv(self, parties):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
@@ -1200,9 +1251,10 @@ class PartiesWindow:
         try:
             with open(path, "w", encoding="utf-8", newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(["الاسم","الرصيد","عدد المعاملات"])
+                writer.writerow(["الاسم","النوع","الرصيد","عدد المعاملات"])
                 for name, info in parties.items():
-                    writer.writerow([name, info.get("balance", 0.0), len(info.get("transactions", []))])
+                    party_type = "مورد" if info.get("type") == "supplier" else "عميل"
+                    writer.writerow([name, party_type, info.get("balance", 0.0), len(info.get("transactions", []))])
             messagebox.showinfo("تم", "تم تصدير الحسابات CSV.")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل التصدير: {e}")
