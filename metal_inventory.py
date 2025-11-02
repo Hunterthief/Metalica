@@ -22,6 +22,8 @@
  - تتبع الربح مع عرض النسب المئوية
  - سجل موحد للعمليات
  - إضافة ميزة موردين/عملاء مع متابعة المبالغ المدفوعة والمطلوبة
+ - إضافة قائمة منسدلة للعملاء والموردين السابقين
+ - إمكانية عرض سجل المعاملات مع عميل أو مورد عند النقر على اسمه
 """
 
 import os
@@ -501,7 +503,7 @@ class MetalInventoryApp(tk.Tk):
             self.refresh_table()
 
     def open_add_stock(self):
-        dialog = AddStockDialog(self, self.data.get("metals", []))
+        dialog = AddStockDialog(self, self.data.get("metals", []), self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
             name, qty, buy_price, source, paid_amount, due_amount = dialog.result
@@ -545,7 +547,7 @@ class MetalInventoryApp(tk.Tk):
             self.refresh_table()
 
     def open_remove_stock(self):
-        dialog = RemoveStockDialog(self, self.data.get("metals", []))
+        dialog = RemoveStockDialog(self, self.data.get("metals", []), self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
             name, qty, sale_price, person, paid_amount, due_amount = dialog.result
@@ -824,11 +826,15 @@ class AddMetalDialog:
         self.top.destroy()
 
 class AddStockDialog:
-    def __init__(self, parent, metals):
+    def __init__(self, parent, metals, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("إضافة كمية لمعدن موجود")
         top.transient(parent)
         top.grab_set()
+        
+        # قائمة الموردين
+        supplier_names = [name for name, info in parties.items() if info.get("type") == "supplier"]
+        
         ttk.Label(top, text="اختر المعدن:").grid(row=0, column=0, sticky="e")
         self.metal_var = tk.StringVar()
         names = [m["name"] for m in metals]
@@ -836,31 +842,61 @@ class AddStockDialog:
         if names:
             self.cmb.current(0)
         self.cmb.grid(row=0, column=1, pady=4)
+        
         ttk.Label(top, text="الكمية (كجم):").grid(row=1, column=0, sticky="e")
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=1, column=1, pady=4)
+        
         ttk.Label(top, text="سعر الشراء لكل كجم:").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
+        
         ttk.Label(top, text="اسم المورد:").grid(row=3, column=0, sticky="e")
-        self.e_source = ttk.Entry(top, justify="right")
-        self.e_source.grid(row=3, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.supplier_var = tk.StringVar()
+        self.cmb_supplier = ttk.Combobox(top, values=supplier_names, textvariable=self.supplier_var, justify="right")
+        self.cmb_supplier.grid(row=3, column=1, pady=4)
+        
+        # حقل إدخال المورد الجديد
+        ttk.Label(top, text="أو أدخل مورد جديد:").grid(row=4, column=0, sticky="e")
+        self.e_new_supplier = ttk.Entry(top, justify="right")
+        self.e_new_supplier.grid(row=4, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=5, column=0, sticky="e")
         self.e_paid = ttk.Entry(top, justify="right")
-        self.e_paid.grid(row=4, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_paid.grid(row=5, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=6, column=0, sticky="e")
         self.e_due = ttk.Entry(top, justify="right")
-        self.e_due.grid(row=5, column=1, pady=4)
-        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=6, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
+        self.e_due.grid(row=6, column=1, pady=4)
+        
+        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=7, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=7, column=0, sticky="w", pady=6)
+        
         self.result = None
+    
     def on_ok(self):
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
         price = self.e_price.get().strip()
-        source = self.e_source.get().strip()
+        
+        # تحديد اسم المورد
+        supplier = self.supplier_var.get().strip()
+        new_supplier = self.e_new_supplier.get().strip()
+        
+        if supplier and new_supplier:
+            messagebox.showerror("خطأ", "يرجى تحديد مورد من القائمة أو إدخال مورد جديد، وليس كليهما.")
+            return
+        elif supplier:
+            source = supplier
+        elif new_supplier:
+            source = new_supplier
+        else:
+            messagebox.showerror("خطأ", "يرجى تحديد مورد أو إدخال مورد جديد.")
+            return
+        
         paid = self.e_paid.get().strip() or "0"
         due = self.e_due.get().strip() or "0"
+        
         if not name or not qty or not price:
             messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة.")
             return
@@ -871,15 +907,20 @@ class AddStockDialog:
             return
         self.result = (name, qty, float(price), source, float(paid), float(due))
         self.top.destroy()
+    
     def on_cancel(self):
         self.top.destroy()
 
 class RemoveStockDialog:
-    def __init__(self, parent, metals):
+    def __init__(self, parent, metals, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("بيع / سحب كمية")
         top.transient(parent)
         top.grab_set()
+        
+        # قائمة العملاء
+        customer_names = [name for name, info in parties.items() if info.get("type") == "customer"]
+        
         ttk.Label(top, text="اختر المعدن:").grid(row=0, column=0, sticky="e")
         self.metal_var = tk.StringVar()
         names = [m["name"] for m in metals]
@@ -887,31 +928,61 @@ class RemoveStockDialog:
         if names:
             self.cmb.current(0)
         self.cmb.grid(row=0, column=1, pady=4)
+        
         ttk.Label(top, text="الكمية (كجم):").grid(row=1, column=0, sticky="e")
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=1, column=1, pady=4)
+        
         ttk.Label(top, text="سعر البيع لكل كجم (جنيه):").grid(row=2, column=0, sticky="e")
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=2, column=1, pady=4)
+        
         ttk.Label(top, text="العميل:").grid(row=3, column=0, sticky="e")
-        self.e_person = ttk.Entry(top, justify="right")
-        self.e_person.grid(row=3, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المدفوع:").grid(row=4, column=0, sticky="e")
+        self.customer_var = tk.StringVar()
+        self.cmb_customer = ttk.Combobox(top, values=customer_names, textvariable=self.customer_var, justify="right")
+        self.cmb_customer.grid(row=3, column=1, pady=4)
+        
+        # حقل إدخال العميل الجديد
+        ttk.Label(top, text="أو أدخل عميل جديد:").grid(row=4, column=0, sticky="e")
+        self.e_new_customer = ttk.Entry(top, justify="right")
+        self.e_new_customer.grid(row=4, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المدفوع:").grid(row=5, column=0, sticky="e")
         self.e_paid = ttk.Entry(top, justify="right")
-        self.e_paid.grid(row=4, column=1, pady=4)
-        ttk.Label(top, text="المبلغ المتبقي:").grid(row=5, column=0, sticky="e")
+        self.e_paid.grid(row=5, column=1, pady=4)
+        
+        ttk.Label(top, text="المبلغ المتبقي:").grid(row=6, column=0, sticky="e")
         self.e_due = ttk.Entry(top, justify="right")
-        self.e_due.grid(row=5, column=1, pady=4)
-        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=6, column=1, sticky="e", pady=6)
-        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=6, column=0, sticky="w", pady=6)
+        self.e_due.grid(row=6, column=1, pady=4)
+        
+        ttk.Button(top, text="تأكيد", command=self.on_ok).grid(row=7, column=1, sticky="e", pady=6)
+        ttk.Button(top, text="إلغاء", command=self.on_cancel).grid(row=7, column=0, sticky="w", pady=6)
+        
         self.result = None
+    
     def on_ok(self):
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
         price = self.e_price.get().strip()
-        person = self.e_person.get().strip()
+        
+        # تحديد اسم العميل
+        customer = self.customer_var.get().strip()
+        new_customer = self.e_new_customer.get().strip()
+        
+        if customer and new_customer:
+            messagebox.showerror("خطأ", "يرجى تحديد عميل من القائمة أو إدخال عميل جديد، وليس كليهما.")
+            return
+        elif customer:
+            person = customer
+        elif new_customer:
+            person = new_customer
+        else:
+            messagebox.showerror("خطأ", "يرجى تحديد عميل أو إدخال عميل جديد.")
+            return
+        
         paid = self.e_paid.get().strip() or "0"
         due = self.e_due.get().strip() or "0"
+        
         if not name or not qty or not price:
             messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة.")
             return
@@ -922,6 +993,7 @@ class RemoveStockDialog:
             return
         self.result = (name, qty, float(price), person, float(paid), float(due))
         self.top.destroy()
+    
     def on_cancel(self):
         self.top.destroy()
 
@@ -984,6 +1056,84 @@ class HistoryWindow:
                 h.get("paid_amount",""), h.get("due_amount",""), h.get("cost_basis",""), 
                 h.get("profit",""), h.get("profit_percentage","")
             ))
+        
+        # عند النقر على اسم العميل أو المورد، عرض سجل المعاملات معه
+        self.tree.bind("<Double-1>", self.on_person_click)
+        self.history = history
+        self.parent = parent
+    
+    def on_person_click(self, event):
+        item = self.tree.focus()
+        if not item:
+            return
+        # الحصول على اسم العميل أو المورد من الصف المحدد
+        values = self.tree.item(item, "values")
+        if len(values) > 6:  # التأكد من أن هناك قيمة للعميل/المورد
+            person_name = values[6]  # العمود السادس هو "الطرف"
+            if person_name:
+                # عرض سجل المعاملات مع هذا الشخص
+                self.show_person_transactions(person_name)
+    
+    def show_person_transactions(self, person_name):
+        # إيجاد جميع المعاملات مع هذا الشخص
+        person_transactions = [h for h in self.history if h.get("person") == person_name]
+        
+        if not person_transactions:
+            messagebox.showinfo("لا توجد معاملات", f"لا توجد معاملات مع {person_name}")
+            return
+        
+        # حساب الرصيد المتبقي (إما مدين أو دائن)
+        total_due = 0
+        for trans in person_transactions:
+            if trans.get("transaction_type") == "purchase":
+                # معاملة شراء (من مورد) - نضيف المبلغ المتبقي
+                total_due += trans.get("due_amount", 0)
+            else:
+                # معاملة بيع (لعميل) - نطرح المبلغ المتبقي
+                total_due -= trans.get("due_amount", 0)
+        
+        # عرض نافذة تفاصيل المعاملات
+        top = tk.Toplevel(self.top)
+        top.title(f"معاملات {person_name}")
+        try:
+            top.state("zoomed")
+        except:
+            try:
+                top.attributes("-zoomed", True)
+            except:
+                pass
+        frm = ttk.Frame(top, padding=10)
+        frm.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(frm, text=f"العميل/المورد: {person_name}").grid(row=0, column=0, sticky="w")
+        ttk.Label(frm, text=f"الرصيد المتبقي: {total_due} جنيه").grid(row=1, column=0, sticky="w")
+        
+        cols = ("date","operation","metal","quantity","total_price","paid_amount","due_amount","profit")
+        headers_ar = {
+            "date":"التاريخ",
+            "operation":"العملية",
+            "metal":"المعدن",
+            "quantity":"الكمية",
+            "total_price":"القيمة الإجمالية",
+            "paid_amount":"المبلغ المدفوع",
+            "due_amount":"المبلغ المتبقي",
+            "profit":"الربح"
+        }
+        tree = ttk.Treeview(frm, columns=cols, show="headings", height=10)
+        for c in cols:
+            tree.heading(c, text=headers_ar.get(c,c))
+            tree.column(c, anchor="center", width=100)
+        tree.grid(row=2, column=0, columnspan=3, pady=8, sticky="nsew")
+        
+        for trans in person_transactions:
+            tree.insert("", "end", values=(
+                trans.get("date"), trans.get("operation"), trans.get("metal"), trans.get("quantity"),
+                trans.get("total_price"), trans.get("paid_amount"), trans.get("due_amount"), trans.get("profit")
+            ))
+        
+        btn_frame = ttk.Frame(frm)
+        btn_frame.grid(row=3, column=0, pady=8, sticky="w")
+        ttk.Button(btn_frame, text="إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
     
     def export_csv(self, history):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
