@@ -320,118 +320,186 @@ class MetalInventoryApp(tk.Tk):
         start_auto_backup(self)
         self.protocol("WM_DELETE_WINDOW", self.on_exit)  # عند الإغلاق
         # self.expanded_metals = set() # Move this line up before refresh_table()
-
     def get_metal_names(self):
         """إرجاع قائمة بأسماء المعادن الحالية من البيانات."""
         return [m["name"] for m in self.data.get("metals", [])]
-
     def apply_theme(self):
         """تطبيق النمط حسب الوضع (فاتح أو مظلم)"""
         if self.dark_mode:
-            # الوضع المظلم
-            self.style.theme_use("clam")
-            # تعديلات لونية
-            self.style.configure("TFrame", background="#1e1e1e")
-            self.style.configure("TLabel", background="#1e1e1e", foreground="#ffffff")
-            self.style.configure("TButton", 
-                                background="#3a3a3a", 
-                                foreground="#ffffff",
+            # --- Enhanced Dark Theme ---
+            self.style.theme_use("clam") # Ensure a consistent base theme
+
+            # Define colors for dark theme
+            bg_main = "#1e1e2e"  # Slightly purplish dark background (Darker Mica)
+            bg_card = "#2d2d44"  # Card background (Lighter Mica for contrast)
+            bg_surface = "#3c3c5a" # Surface background (e.g., Treeview, Entry)
+            text_primary = "#ffffff"
+            text_secondary = "#cccccc"
+            accent_color = "#539bf5" # Fluent Blue or similar bright accent
+            accent_hover = "#6ca0ff"
+            accent_pressed = "#4a8ce0"
+            border_color = "#45456d" # Subtle border color matching surface
+
+            # Apply styles
+            self.style.configure("TFrame", background=bg_main)
+            self.style.configure("TLabel", background=bg_main, foreground=text_primary)
+            # Enhanced Button with Gradient and Better Colors
+            self.style.configure("TButton",
+                                background=accent_color,
+                                foreground=text_primary,
                                 borderwidth=0,
                                 focuscolor="none",
-                                padding=(10, 5),
-                                font=("Cairo", 10, "bold"))
-            self.style.map("TButton", 
-                          background=[("active", "#4a4a4a")],
+                                padding=(12, 6), # Increased padding for a more substantial feel
+                                font=("Cairo", 10, "bold"),
+                                anchor="center") # Center text in button
+            self.style.map("TButton",
+                          background=[("active", accent_hover), ("pressed", accent_pressed)],
                           relief=[("pressed", "sunken")])
-            self.style.configure("Treeview", 
-                                background="#252526", 
-                                foreground="#ffffff", 
-                                fieldbackground="#252526",
-                                borderwidth=0,
-                                relief="flat")
-            self.style.configure("Treeview.Heading", 
-                                background="#333333", 
-                                foreground="#ffffff",
+
+            # Enhanced Treeview
+            self.style.configure("Treeview",
+                                background=bg_surface,
+                                foreground=text_primary,
+                                fieldbackground=bg_surface,
+                                borderwidth=1, # Add a subtle border
+                                relief="flat",
+                                bordercolor=border_color) # Set the border color
+            self.style.configure("Treeview.Heading",
+                                background=bg_card,
+                                foreground=text_primary,
                                 borderwidth=0,
                                 relief="flat",
-                                padding=(5, 5),
+                                padding=(10, 8), # Increased padding for headers
                                 font=("Cairo", 10, "bold"))
-            self.style.map("Treeview.Heading", 
-                          background=[("active", "#3a3a3a")])
-            self.style.configure("TEntry", 
-                                fieldbackground="#2d2d2d", 
-                                foreground="#ffffff",
-                                borderwidth=0,
+            self.style.map("Treeview.Heading",
+                          background=[("active", bg_surface)]) # Hover effect for header
+
+            # Enhanced Entry and Combobox
+            self.style.configure("TEntry",
+                                fieldbackground=bg_surface,
+                                foreground=text_primary,
+                                borderwidth=1, # Add a border
                                 relief="flat",
-                                insertcolor="#ffffff")
-            self.style.configure("TCombobox", 
-                                fieldbackground="#2d2d2d", 
-                                foreground="#ffffff",
+                                insertcolor=text_primary,
+                                bordercolor=border_color) # Set the border color
+            self.style.map("TEntry", # Focus indicator
+                          bordercolor=[("!focus", border_color), ("focus", accent_color)])
+
+            self.style.configure("TCombobox",
+                                fieldbackground=bg_surface,
+                                foreground=text_primary,
+                                borderwidth=1, # Add a border
+                                relief="flat",
+                                bordercolor=border_color) # Set the border color
+            self.style.map("TCombobox",
+                          fieldbackground=[("readonly", bg_surface)],
+                          selectbackground=[("!focus", bg_surface)],
+                          selectforeground=[("!focus", text_primary)],
+                          bordercolor=[("!focus", border_color), ("focus", accent_color)]) # Focus indicator
+
+            # Enhanced Scrollbar
+            self.style.configure("TScrollbar",
+                                background=bg_card,
+                                troughcolor=bg_main,
                                 borderwidth=0,
-                                relief="flat")
-            self.style.map("TCombobox", 
-                          fieldbackground=[("readonly", "#2d2d2d")],
-                          selectbackground=[("!focus", "#2d2d2d")],
-                          selectforeground=[("!focus", "#ffffff")])
-            self.style.configure("TScrollbar", 
-                                background="#3c3c3c", 
-                                troughcolor="#2a2a2a",
-                                borderwidth=0)
-            # تعيين لون خلفية النافذة الرئيسية
-            self.configure(bg="#1e1e1e")
+                                gripcount=0) # Remove grip for cleaner look
+            self.style.map("TScrollbar",
+                          background=[("active", bg_surface)])
+
+            # Status bar frame (could be a lighter shade of main bg or same as card)
+            self.style.configure("Status.TFrame", background=bg_card) # Define a specific style for status frame
+
+            # Toplevel windows background
+            self.configure(bg=bg_main)
+
         else:
-            # الوضع الفاتح
-            self.style.theme_use("clam")
-            # تعديلات لونية
-            self.style.configure("TFrame", background="#f8f9fa")
-            self.style.configure("TLabel", background="#f8f9fa", foreground="#212529")
-            # تدرج معدني للزراير
-            self.style.configure("TButton", 
-                                background="#0078d7", 
-                                foreground="#ffffff",
+            # --- Enhanced Light Theme ---
+            self.style.theme_use("clam") # Ensure a consistent base theme
+
+            # Define colors for light theme
+            bg_main = "#f3f3f3" # Soft light background
+            bg_card = "#ffffff"  # Card background (Pure white)
+            bg_surface = "#f9f9f9" # Surface background (e.g., Treeview, Entry)
+            text_primary = "#202020"
+            text_secondary = "#505050"
+            accent_color = "#0078d7" # Fluent Blue
+            accent_hover = "#106ebe"
+            accent_pressed = "#005a9e"
+            border_color = "#d0d0d0" # Subtle border color
+
+            # Apply styles
+            self.style.configure("TFrame", background=bg_main)
+            self.style.configure("TLabel", background=bg_main, foreground=text_primary)
+            # Enhanced Button with Gradient and Better Colors
+            self.style.configure("TButton",
+                                background=accent_color,
+                                foreground=text_primary,
                                 borderwidth=0,
                                 focuscolor="none",
-                                padding=(10, 5),
-                                font=("Cairo", 10, "bold"))
-            self.style.map("TButton", 
-                          background=[("active", "#106ebe")],
+                                padding=(12, 6), # Increased padding
+                                font=("Cairo", 10, "bold"),
+                                anchor="center")
+            self.style.map("TButton",
+                          background=[("active", accent_hover), ("pressed", accent_pressed)],
                           relief=[("pressed", "sunken")])
-            self.style.configure("Treeview", 
-                                background="#ffffff", 
-                                foreground="#212529", 
-                                fieldbackground="#ffffff",
-                                borderwidth=0,
-                                relief="flat")
-            self.style.configure("Treeview.Heading", 
-                                background="#e9ecef", 
-                                foreground="#212529",
-                                borderwidth=0,
+
+            # Enhanced Treeview
+            self.style.configure("Treeview",
+                                background=bg_surface,
+                                foreground=text_primary,
+                                fieldbackground=bg_surface,
+                                borderwidth=1, # Add a subtle border
                                 relief="flat",
-                                padding=(5, 5),
-                                font=("Cairo", 10, "bold"))
-            self.style.map("Treeview.Heading", 
-                          background=[("active", "#dee2e6")])
-            self.style.configure("TEntry", 
-                                fieldbackground="#ffffff", 
-                                foreground="#212529",
-                                borderwidth=0,
+                                bordercolor=border_color)
+            self.style.configure("Treeview.Heading",
+                                background=bg_card,
+                                foreground=text_primary,
+                                borderwidth=1, # Add border to header too
                                 relief="flat",
-                                insertcolor="#212529")
-            self.style.configure("TCombobox", 
-                                fieldbackground="#ffffff", 
-                                foreground="#212529",
+                                padding=(10, 8), # Increased padding
+                                font=("Cairo", 10, "bold"),
+                                bordercolor=border_color) # Set header border color
+            self.style.map("Treeview.Heading",
+                          background=[("active", bg_surface)])
+
+            # Enhanced Entry and Combobox
+            self.style.configure("TEntry",
+                                fieldbackground=bg_card, # Pure white for entry bg
+                                foreground=text_primary,
+                                borderwidth=1,
+                                relief="flat",
+                                insertcolor=text_primary,
+                                bordercolor=border_color)
+            self.style.map("TEntry",
+                          bordercolor=[("!focus", border_color), ("focus", accent_color)])
+
+            self.style.configure("TCombobox",
+                                fieldbackground=bg_card, # Pure white for combobox bg
+                                foreground=text_primary,
+                                borderwidth=1,
+                                relief="flat",
+                                bordercolor=border_color)
+            self.style.map("TCombobox",
+                          fieldbackground=[("readonly", bg_card)],
+                          selectbackground=[("!focus", bg_card)],
+                          selectforeground=[("!focus", text_primary)],
+                          bordercolor=[("!focus", border_color), ("focus", accent_color)])
+
+            # Enhanced Scrollbar
+            self.style.configure("TScrollbar",
+                                background=bg_surface,
+                                troughcolor=bg_main,
                                 borderwidth=0,
-                                relief="flat")
-            self.style.map("TCombobox", 
-                          fieldbackground=[("readonly", "#ffffff")],
-                          selectbackground=[("!focus", "#ffffff")],
-                          selectforeground=[("!focus", "#212529")])
-            self.style.configure("TScrollbar", 
-                                background="#e9ecef", 
-                                troughcolor="#f8f9fa",
-                                borderwidth=0)
-            # تعيين لون خلفية النافذة الرئيسية
-            self.configure(bg="#f8f9fa")
+                                gripcount=0)
+            self.style.map("TScrollbar",
+                          background=[("active", bg_card)])
+
+            # Status bar frame
+            self.style.configure("Status.TFrame", background=bg_card)
+
+            # Toplevel windows background
+            self.configure(bg=bg_main)
+
     def toggle_theme(self):
         """تبديل بين الوضع المظلم والفاتح"""
         self.dark_mode = not self.dark_mode
@@ -462,6 +530,7 @@ class MetalInventoryApp(tk.Tk):
         # إطار الأدوات العلوية
         toolbar_frame = ttk.Frame(self)
         toolbar_frame.pack(fill=tk.X, padx=10, pady=5)
+
         # أزرار الأدوات - مع إضافة رموز ملونة وجذابة
         self.btn_add_metal = ttk.Button(toolbar_frame, text="✨ إضافة معدن", command=self.open_add_metal_menu)
         self.btn_add_stock = ttk.Button(toolbar_frame, text="📦 إضافة كمية", command=self.open_add_stock)
@@ -473,10 +542,12 @@ class MetalInventoryApp(tk.Tk):
         self.btn_parties = ttk.Button(toolbar_frame, text="👥 الحسابات", command=self.open_parties_window)
         self.btn_expenses = ttk.Button(toolbar_frame, text="💸 المصروفات", command=self.open_expenses_window)
         self.btn_theme = ttk.Button(toolbar_frame, text="🌙/☀️ الوضع", command=self.toggle_theme)
+
         # ترتيب الأزرار من اليمين إلى اليسار
-        for w in [self.btn_theme, self.btn_expenses, self.btn_parties, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal, 
+        for w in [self.btn_theme, self.btn_expenses, self.btn_parties, self.btn_import, self.btn_export, self.btn_history, self.btn_remove_metal,
                   self.btn_remove_stock, self.btn_add_stock, self.btn_add_metal]:
             w.pack(side=tk.RIGHT, padx=3)
+
         # شريط البحث
         search_frame = ttk.Frame(self)
         search_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -485,9 +556,11 @@ class MetalInventoryApp(tk.Tk):
         entry_search = ttk.Entry(search_frame, textvariable=self.search_var, justify="right")
         entry_search.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(0, 5))
         entry_search.bind("<KeyRelease>", lambda e: self.refresh_table())
+
         # جدول المعادن
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
         cols = ("name","quantity","price","value","last","sources_count")
         self.tree = ttk.Treeview(main_frame, columns=cols, show="headings", height=15)
         self.tree.heading("name", text="المعدن")
@@ -496,26 +569,33 @@ class MetalInventoryApp(tk.Tk):
         self.tree.heading("value", text="القيمة الإجمالية")
         self.tree.heading("last", text="آخر تحديث")
         self.tree.heading("sources_count", text="عدد المصادر")
+
         for c in cols:
             self.tree.column(c, anchor="center", width=150)
+
         vsb = ttk.Scrollbar(main_frame, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(main_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscroll=vsb.set, xscroll=hsb.set)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
         # ربط النقر على العنصر
         self.tree.bind("<Button-1>", self.on_item_click)
         self.tree.bind("<Double-1>", self.on_item_double_click)
-        # شريط الحالة السفلي
-        status_frame = ttk.Frame(self)
+
+        # شريط الحالة السفلي - Use the specific style defined in apply_theme
+        status_frame = ttk.Frame(self, style="Status.TFrame") # Apply the specific style
         status_frame.pack(fill=tk.X, padx=10, pady=5)
+
         self.total_value_label = ttk.Label(status_frame, text="إجمالي قيمة المخزون (سعر الشراء): 0 جنيه")
         self.total_profit_label = ttk.Label(status_frame, text="إجمالي الربح: 0 جنيه (0.0%)")
         self.last_backup_label = ttk.Label(status_frame, text="آخر نسخة احتياطية: -")
+
         self.total_profit_label.pack(side=tk.LEFT, padx=8)
         self.total_value_label.pack(side=tk.LEFT, padx=8)
         self.last_backup_label.pack(side=tk.RIGHT, padx=8)
+
     # -----------------------------------------------------------------
     # الإغلاق الآمن
     # -----------------------------------------------------------------
@@ -567,7 +647,7 @@ class MetalInventoryApp(tk.Tk):
         btn_frame.pack(pady=10)
         btn_new = ttk.Button(btn_frame, text="✨ معدن جديد", command=lambda:[menu.destroy(), self.open_add_metal_dialog()])
         btn_new.grid(row=0, column=0, padx=5, pady=5)
-        btn_existing = ttk.Button(btn_frame, text="📦 إضافة لمعدن موجود", 
+        btn_existing = ttk.Button(btn_frame, text="📦 إضافة لمعدن موجود",
                                   command=lambda:[menu.destroy(), self.open_add_stock()])
         btn_existing.grid(row=0, column=1, padx=5, pady=5)
     def open_add_metal_dialog(self):
@@ -768,21 +848,17 @@ class MetalInventoryApp(tk.Tk):
         top.geometry("400x150")
         top.transient(self)
         top.grab_set()
-
         ttk.Label(top, text="اختر المعدن لحذفه:", font=("Cairo", 12, "bold")).pack(pady=10)
-        
         metal_names = self.get_metal_names()
         if not metal_names:
             messagebox.showinfo("لا توجد معادن", "لا توجد معادن لحذفها.")
             top.destroy()
             return
-
         metal_var = tk.StringVar()
         cmb_metal = ttk.Combobox(top, values=metal_names, textvariable=metal_var, state="readonly", justify="right")
         cmb_metal.pack(pady=10)
         if metal_names:
             cmb_metal.current(0) # تحديد أول معدن
-
         def delete_selected():
             selected_name = metal_var.get()
             if not selected_name:
@@ -798,7 +874,6 @@ class MetalInventoryApp(tk.Tk):
             self.refresh_table()
             messagebox.showinfo("تم", f"تم حذف المعدن '{selected_name}' بنجاح.")
             top.destroy()
-
         btn_frame = ttk.Frame(top)
         btn_frame.pack(pady=10)
         ttk.Button(btn_frame, text="🗑️ حذف", command=delete_selected).pack(side=tk.RIGHT, padx=5)
@@ -864,6 +939,7 @@ class MetalInventoryApp(tk.Tk):
             sources_count = len(m.get("lots", []))
             # إضافة المعدن الرئيسي
             self.tree.insert("", "end", iid=name, values=(name, qty, buy_price, value, last, sources_count))
+
             # إذا كان العنصر مفتوحًا لعرض الدفعات
             if name in self.expanded_metals:
                 for idx, lot in enumerate(m.get("lots", [])):
@@ -883,12 +959,19 @@ class MetalInventoryApp(tk.Tk):
                     ))
                     # جعل السطر فرعيًا
                     self.tree.item(lot_id, tags=('subitem',))
-        # تطبيق التنسيق على العناصر الفرعية
-        self.tree.tag_configure('subitem', background='#f0f0f0' if not self.dark_mode else '#3a3a3a')
+
+        # تطبيق التنسيق على العناصر الفرعية - Use theme colors for subitems
+        if self.dark_mode:
+             subitem_bg = "#2a2a3c" # Slightly different shade for dark theme
+        else:
+             subitem_bg = "#f0f0f5" # Slightly different shade for light theme
+        self.tree.tag_configure('subitem', background=subitem_bg)
+
         # حساب إجمالي الأرباح ونسبة الربح من السجلات (لحسابات النسب المئوية)
         for h in self.data.get("history", []):
             if h.get("transaction_type") == "sale":
                 total_revenue += h.get("total_price", 0)
+
         profit_percentage = round((total_profit / total_revenue * 100) if total_revenue > 0 else 0, 2)
         # حساب صافي الربح (الإيرادات - المصروفات) أو (إجمالي الربح من المعادن - المصروفات)
         net_profit = total_profit - total_expenses
@@ -899,6 +982,7 @@ class MetalInventoryApp(tk.Tk):
         backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_")])
         last = backups[-1] if backups else "-"
         self.last_backup_label.config(text=f"آخر نسخة احتياطية: {last}")
+
     def on_item_double_click(self, event):
         item = self.tree.focus()
         if not item:
@@ -928,6 +1012,7 @@ class MetalInventoryApp(tk.Tk):
         ttk.Label(frm, text=f"سعر بيع افتراضي: {metal.get('sale_price_per_kg',0.0)} جنيه/كجم").grid(row=3, column=0, sticky="w")
         ttk.Label(frm, text=f"إجمالي المدفوع: {metal_total_paid(metal)} جنيه").grid(row=4, column=0, sticky="w")
         ttk.Label(frm, text=f"الربح الإجمالي: {metal.get('profit_total',0.0)} جنيه").grid(row=5, column=0, sticky="w")
+
         cols = ("source","quantity","price_per_kg","total_paid","date")
         tree = ttk.Treeview(frm, columns=cols, show="headings", height=8)
         tree.heading("source", text="المصدر")
@@ -936,19 +1021,22 @@ class MetalInventoryApp(tk.Tk):
         tree.heading("total_paid", text="المبلغ المدفوع (جنيه)")
         tree.heading("date", text="تاريخ الإضافة")
         tree.grid(row=6, column=0, columnspan=3, pady=8, sticky="nsew")
+
         for lot in metal.get("lots", []):
             tree.insert("", "end", values=(
-                lot.get("source"), 
-                lot.get("quantity"), 
+                lot.get("source"),
+                lot.get("quantity"),
                 lot.get("price_per_kg", metal.get("price_per_kg", 0.0)),
-                lot.get("total_paid"), 
+                lot.get("total_paid"),
                 lot.get("date")
             ))
+
         btn_frame = ttk.Frame(frm)
         btn_frame.grid(row=7, column=0, pady=8, sticky="w")
         ttk.Button(btn_frame, text="✏️ تعديل الأسعار", command=lambda: self.edit_prices_dialog(metal, top)).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_frame, text="📄 تصدير مصادر CSV", command=lambda: self.export_lots_csv(metal)).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_frame, text="❌ إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
+
     def edit_prices_dialog(self, metal, parent_window=None):
         top = tk.Toplevel(self)
         top.title(f"تعديل أسعار - {metal['name']}")
@@ -962,6 +1050,7 @@ class MetalInventoryApp(tk.Tk):
         e_sell = ttk.Entry(top, justify="right")
         e_sell.grid(row=1, column=1, padx=6, pady=4)
         e_sell.insert(0, str(metal.get("sale_price_per_kg", metal.get("price_per_kg",0.0))))
+
         def save_prices():
             try:
                 metal["price_per_kg"] = float(e_buy.get())
@@ -975,10 +1064,12 @@ class MetalInventoryApp(tk.Tk):
                     parent_window.lift()
             except Exception as e:
                 messagebox.showerror("خطأ", f"قيمة غير صحيحة: {e}")
+
         button_frame = ttk.Frame(top)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
         ttk.Button(button_frame, text="💾 حفظ", command=save_prices).pack(side=tk.RIGHT, padx=5)
         ttk.Button(button_frame, text="❌ إلغاء", command=top.destroy).pack(side=tk.RIGHT, padx=5)
+
     def export_lots_csv(self, metal):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
         if not path:
@@ -989,10 +1080,10 @@ class MetalInventoryApp(tk.Tk):
                 writer.writerow(["المصدر","الكمية (كجم)","سعر الشراء (جنيه/كجم)","المبلغ المدفوع (جنيه)","تاريخ الإضافة"])
                 for l in metal.get("lots", []):
                     writer.writerow([
-                        l.get("source"), 
-                        l.get("quantity"), 
+                        l.get("source"),
+                        l.get("quantity"),
                         l.get("price_per_kg", metal.get("price_per_kg", 0.0)),
-                        l.get("total_paid"), 
+                        l.get("total_paid"),
                         l.get("date")
                     ])
             messagebox.showinfo("تم", "تم تصدير البيانات.")
@@ -1008,6 +1099,29 @@ class AddMetalDialog:
         top.geometry("450x350")
         top.transient(parent)
         top.grab_set()
+        # --- Apply Parent Theme Colors ---
+        # Get colors from parent's style (assuming apply_theme was called)
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+
+        top.configure(bg=bg_main) # Set dialog background
+
+        # --- Style Widgets ---
+        # Apply specific styles if needed, or rely on parent's theme if ttk handles it consistently
+        # For simplicity, we rely on the parent's theme here, but explicit coloring could be added.
+        # For now, just ensure the Toplevel background is set.
+
+        # --- Original Widget Code ---
         # قائمة الموردين
         supplier_names = [name for name, info in parties.items() if info.get("type") == "supplier"]
         ttk.Label(top, text="اسم المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
@@ -1076,6 +1190,22 @@ class AddStockDialog:
         top.geometry("450x350")
         top.transient(parent)
         top.grab_set()
+        # --- Apply Parent Theme Colors ---
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
+
+        # --- Original Widget Code ---
         # قائمة الموردين
         supplier_names = [name for name, info in parties.items() if info.get("type") == "supplier"]
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
@@ -1150,71 +1280,74 @@ class RemoveStockDialog:
         top.geometry("450x450")
         top.transient(parent)
         top.grab_set()
+        # --- Apply Parent Theme Colors ---
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
 
+        # --- Original Widget Code ---
         # --- Fetch current data from parent ---
         self.parent = parent
         # Use the passed metal_names and parties, assuming they are current at call time
         self.metal_names = metal_names
         self.parties = parties
-
         # --- Customer Names ---
         self.customer_names = [name for name, info in self.parties.items() if info.get("type") == "customer"]
-
         # --- Variables ---
         self.metal_var = tk.StringVar()
         self.lot_var = tk.StringVar()
         self.lot_options_map = {}  # Maps display string to (lot_index, lot_quantity, lot_price)
-
         # --- Layout ---
         # Row 0: Metal Selection
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
         self.cmb_metal = ttk.Combobox(top, values=self.metal_names, textvariable=self.metal_var, state="readonly", justify="right")
         self.cmb_metal.grid(row=0, column=1, pady=5, padx=5)
         self.cmb_metal.bind("<<ComboboxSelected>>", self.on_metal_selected)
-
         # Row 1: Lot Selection
         ttk.Label(top, text="اختر الدفعة:", font=("Cairo", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=5)
         self.cmb_lot = ttk.Combobox(top, textvariable=self.lot_var, state="readonly", justify="right")
         self.cmb_lot.grid(row=1, column=1, pady=5, padx=5)
         self.cmb_lot.bind("<<ComboboxSelected>>", self.on_lot_selected)
-
         # Row 2: Quantity
         ttk.Label(top, text="الكمية (كجم):", font=("Cairo", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=5)
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=2, column=1, pady=5, padx=5)
-
         # Row 3: Sale Price
         ttk.Label(top, text="سعر البيع لكل كجم (جنيه):", font=("Cairo", 10, "bold")).grid(row=3, column=0, sticky="e", padx=5, pady=5)
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=3, column=1, pady=5, padx=5)
-
         # Row 4: Customer Selection
         ttk.Label(top, text="العميل:", font=("Cairo", 10, "bold")).grid(row=4, column=0, sticky="e", padx=5, pady=5)
         self.customer_var = tk.StringVar()
         self.cmb_customer = ttk.Combobox(top, values=self.customer_names, textvariable=self.customer_var, justify="right")
         self.cmb_customer.grid(row=4, column=1, pady=5, padx=5)
-
         # Row 5: New Customer
         ttk.Label(top, text="أو أدخل عميل جديد:", font=("Cairo", 10, "bold")).grid(row=5, column=0, sticky="e", padx=5, pady=5)
         self.e_new_customer = ttk.Entry(top, justify="right")
         self.e_new_customer.grid(row=5, column=1, pady=5, padx=5)
-
         # Row 6: Amount Paid
         ttk.Label(top, text="المبلغ المدفوع:", font=("Cairo", 10, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
         self.e_paid = ttk.Entry(top, justify="right")
         self.e_paid.grid(row=6, column=1, pady=5, padx=5)
-
         # Row 7: Amount Due
         ttk.Label(top, text="المبلغ المتبقي:", font=("Cairo", 10, "bold")).grid(row=7, column=0, sticky="e", padx=5, pady=5)
         self.e_due = ttk.Entry(top, justify="right")
         self.e_due.grid(row=7, column=1, pady=5, padx=5)
-
         # Buttons Frame
         btn_frame = ttk.Frame(top)
         btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
         ttk.Button(btn_frame, text="✅ تأكيد", command=self.on_ok).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
-
         # --- Initialize state after widgets are created ---
         self.result = None
         if self.metal_names:
@@ -1225,8 +1358,6 @@ class RemoveStockDialog:
             self.cmb_lot['values'] = []
             self.cmb_lot.state(['disabled'])
             self.lot_var.set("")
-
-
     def on_metal_selected(self, event=None):
         """Called when a metal is selected."""
         selected_metal_name = self.metal_var.get()
@@ -1237,8 +1368,6 @@ class RemoveStockDialog:
             first_lot_key = next(iter(self.lot_options_map))
             self.lot_var.set(first_lot_key)
             self.prefill_quantity()
-
-
     def update_lot_options(self, metal_name):
         """Updates the lot combobox based on the selected metal."""
         self.lot_options_map.clear() # Clear previous map
@@ -1248,7 +1377,6 @@ class RemoveStockDialog:
             self.lot_var.set("")
             self.e_qty.delete(0, tk.END) # Clear quantity field
             return
-
         metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
         if not metal:
              # This shouldn't happen if metal_name came from the metal combobox
@@ -1257,7 +1385,6 @@ class RemoveStockDialog:
             self.lot_var.set("")
             self.e_qty.delete(0, tk.END)
             return
-
         lots = metal.get("lots", [])
         lot_strings = []
         for idx, lot in enumerate(lots):
@@ -1267,7 +1394,6 @@ class RemoveStockDialog:
                 lot_str = f"{idx}: {qty} كجم @ {price} جنيه"
                 lot_strings.append(lot_str)
                 self.lot_options_map[lot_str] = (idx, qty, price) # Store mapping
-
         self.cmb_lot['values'] = lot_strings
         if lot_strings:
             self.cmb_lot.state(['!disabled'])
@@ -1276,30 +1402,22 @@ class RemoveStockDialog:
             self.cmb_lot.state(['disabled'])
             self.lot_var.set("")
             self.e_qty.delete(0, tk.END)
-
-
     def on_lot_selected(self, event=None):
         """Called when a lot is selected."""
         self.prefill_quantity()
-
-
     def prefill_quantity(self):
         """Prefills the quantity field based on the selected lot."""
         lot_str = self.lot_var.get()
         if not lot_str or lot_str not in self.lot_options_map:
             return
-
         _, lot_qty, _ = self.lot_options_map[lot_str]
         self.e_qty.delete(0, tk.END)
         self.e_qty.insert(0, str(lot_qty))
-
-
     def on_ok(self):
         """Handles the OK button click."""
         name = self.metal_var.get().strip()
         qty_str = self.e_qty.get().strip()
         price_str = self.e_price.get().strip()
-
         # Customer selection logic
         customer = self.customer_var.get().strip()
         new_customer = self.e_new_customer.get().strip()
@@ -1313,14 +1431,11 @@ class RemoveStockDialog:
         else:
             messagebox.showerror("خطأ", "يرجى تحديد عميل أو إدخال عميل جديد.")
             return
-
         paid_str = self.e_paid.get().strip() or "0"
         due_str = self.e_due.get().strip() or "0"
-
         if not name or not qty_str or not price_str:
             messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة (المعدن، الكمية، سعر البيع).")
             return
-
         try:
             qty = float(qty_str)
             price = float(price_str)
@@ -1329,14 +1444,12 @@ class RemoveStockDialog:
         except ValueError:
             messagebox.showerror("خطأ", "يرجى التأكد من أن القيم المدخلة صحيحة.")
             return
-
         if qty <= 0:
              messagebox.showerror("خطأ", "يجب أن تكون الكمية أكبر من صفر.")
              return
         if price < 0:
              messagebox.showerror("خطأ", "لا يمكن أن يكون سعر البيع سالبًا.")
              return
-
         # Get lot index from selection
         lot_str = self.lot_var.get()
         lot_index = None
@@ -1346,7 +1459,8 @@ class RemoveStockDialog:
             if qty > lot_qty:
                 # Quantity exceeds specific lot, ask for split or cancel
                 confirmation_msg = (
-                    f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).\n"
+                    f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).
+"
                     "هل تريد تقسيم الكمية على دفعات متعددة؟"
                 )
                 if messagebox.askyesno("تأكيد", confirmation_msg):
@@ -1369,66 +1483,54 @@ class RemoveStockDialog:
             else:
                  messagebox.showerror("خطأ", "المعدن المحدد غير موجود.")
                  return
-
-
         # If we reach here, the single transaction is valid
         self.result = (name, qty_str, price, person, paid, due, lot_index)
         self.top.destroy()
-
-
     def split_quantity_over_lots(self, metal_name, total_qty, sale_price, person, paid_amount, due_amount):
         """Handles splitting a sale across multiple lots (FIFO)."""
         metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
         if not metal:
             messagebox.showerror("خطأ", "المعدن المحدد غير موجود.")
             return None
-
         lots = metal.get("lots", [])
         # Sort lots by date for FIFO (assuming date format is ISO string)
         lots_with_index = [(i, lot) for i, lot in enumerate(lots) if lot.get("quantity", 0) > 0]
         lots_with_index.sort(key=lambda x: x[1].get("date", ""))
-
         remaining_qty = total_qty
         transactions = []
         used_lots_summary = []
-
         for lot_index, lot in lots_with_index:
             if remaining_qty <= 0:
                 break # All quantity has been allocated
-
             lot_qty = lot.get("quantity", 0)
             lot_price = lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
-
             qty_to_take = min(remaining_qty, lot_qty)
             portion_paid = round((qty_to_take / total_qty) * paid_amount, 2)
             portion_due = round((qty_to_take / total_qty) * due_amount, 2)
-
             transactions.append((metal_name, qty_to_take, sale_price, person, portion_paid, portion_due, lot_index))
             used_lots_summary.append((lot_index, qty_to_take, lot_price))
             remaining_qty -= qty_to_take
-
         if remaining_qty > 1e-9:
             messagebox.showerror("خطأ", f"الكمية المتوفرة ({total_qty - remaining_qty:.6f}) أقل من الكمية المطلوبة ({total_qty}).")
             return None
-
         # Show summary before confirming split
-        summary = "سيتم تقسيم البيع على الدفعات التالية:\n"
+        summary = "سيتم تقسيم البيع على الدفعات التالية:
+"
         for lot_idx, qty_taken, price_per_kg in used_lots_summary:
-            summary += f"- دفعة {lot_idx}: {qty_taken:.6f} كجم @ {price_per_kg} جنيه/كجم\n"
-
+            summary += f"- دفعة {lot_idx}: {qty_taken:.6f} كجم @ {price_per_kg} جنيه/كجم
+"
         total_cost_basis = sum(qty * price for _, qty, price in used_lots_summary)
         total_revenue = total_qty * sale_price
         total_profit = total_revenue - total_cost_basis
-        summary += f"\nإجمالي تكلفة الشراء: {total_cost_basis:.2f} جنيه\n"
-        summary += f"إجمالي سعر البيع: {total_revenue:.2f} جنيه\n"
+        summary += f"
+إجمالي تكلفة الشراء: {total_cost_basis:.2f} جنيه
+"
+        summary += f"إجمالي سعر البيع: {total_revenue:.2f} جنيه
+"
         summary += f"إجمالي الربح المتوقع: {total_profit:.2f} جنيه"
-
         if not messagebox.askyesno("تأكيد التقسيم", summary):
             return None
-
         return transactions
-
-
     def on_cancel(self):
         self.top.destroy()
 class HistoryWindow:
@@ -1443,12 +1545,28 @@ class HistoryWindow:
             except:
                 pass
         top.geometry("900x600")
+        # --- Apply Parent Theme Colors ---
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main) # Set dialog background
+
         # إطار الأدوات
         tool_frame = ttk.Frame(top)
         tool_frame.pack(fill=tk.X, padx=6, pady=6)
         ttk.Button(tool_frame, text="📄 تصدير CSV", command=lambda: self.export_csv(history)).pack(side=tk.LEFT, padx=4)
         ttk.Button(tool_frame, text="📄 تصدير JSON", command=lambda: self.export_json(history)).pack(side=tk.LEFT, padx=4)
         ttk.Button(tool_frame, text="✏️ تعديل سجل", command=lambda: self.edit_history_entry(history)).pack(side=tk.LEFT, padx=4)
+
         # جدول السجل
         cols = ("date","operation","metal","quantity","price_per_kg","total_price","person","paid_amount","due_amount","cost_basis","profit","profit_percentage")
         headers_ar = {
@@ -1477,14 +1595,16 @@ class HistoryWindow:
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
         # ملء الجدول
         for i, h in enumerate(history):
             self.tree.insert("", "end", iid=i, values=(
                 h.get("date"), h.get("operation"), h.get("metal"), h.get("quantity"),
                 h.get("price_per_kg"), h.get("total_price"), h.get("person"),
-                h.get("paid_amount",""), h.get("due_amount",""), h.get("cost_basis",""), 
+                h.get("paid_amount",""), h.get("due_amount",""), h.get("cost_basis",""),
                 h.get("profit",""), h.get("profit_percentage","")
             ))
+
         # عند النقر على اسم العميل أو المورد، عرض سجل المعاملات معه
         self.tree.bind("<Double-1>", self.on_person_click)
         self.history = history
@@ -1525,10 +1645,26 @@ class HistoryWindow:
                 top.attributes("-zoomed", True)
             except:
                 pass
+        # --- Apply Parent Theme Colors ---
+        if self.parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
+
         frm = ttk.Frame(top, padding=10)
         frm.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frm, text=f"العميل/المورد: {person_name}", font=("Cairo", 14, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Label(frm, text=f"الرصيد المتبقي: {total_due} جنيه").grid(row=1, column=0, sticky="w")
+
         cols = ("date","operation","metal","quantity","total_price","paid_amount","due_amount","profit")
         headers_ar = {
             "date":"التاريخ",
@@ -1545,11 +1681,13 @@ class HistoryWindow:
             tree.heading(c, text=headers_ar.get(c,c))
             tree.column(c, anchor="center", width=100)
         tree.grid(row=2, column=0, columnspan=3, pady=8, sticky="nsew")
+
         for trans in person_transactions:
             tree.insert("", "end", values=(
                 trans.get("date"), trans.get("operation"), trans.get("metal"), trans.get("quantity"),
                 trans.get("total_price"), trans.get("paid_amount"), trans.get("due_amount"), trans.get("profit")
             ))
+
         btn_frame = ttk.Frame(frm)
         btn_frame.grid(row=3, column=0, pady=8, sticky="w")
         ttk.Button(btn_frame, text="❌ إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
@@ -1590,20 +1728,35 @@ class HistoryWindow:
         edit_window.geometry("500x500")
         edit_window.transient(self.top)
         edit_window.grab_set()
+        # --- Apply Parent Theme Colors ---
+        if self.parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        edit_window.configure(bg=bg_main)
+
         # حقول التعديل
         fields = {}
         row = 0
-        for label, field in [("التاريخ:", "date"), 
-                            ("العملية:", "operation"), 
-                            ("المعدن:", "metal"), 
-                            ("الكمية:", "quantity"), 
-                            ("السعر لكل كجم:", "price_per_kg"), 
-                            ("القيمة الإجمالية:", "total_price"), 
-                            ("الطرف:", "person"), 
-                            ("المبلغ المدفوع:", "paid_amount"), 
-                            ("المبلغ المتبقي:", "due_amount"), 
-                            ("تكلفة الشراء:", "cost_basis"), 
-                            ("الربح:", "profit"), 
+        for label, field in [("التاريخ:", "date"),
+                            ("العملية:", "operation"),
+                            ("المعدن:", "metal"),
+                            ("الكمية:", "quantity"),
+                            ("السعر لكل كجم:", "price_per_kg"),
+                            ("القيمة الإجمالية:", "total_price"),
+                            ("الطرف:", "person"),
+                            ("المبلغ المدفوع:", "paid_amount"),
+                            ("المبلغ المتبقي:", "due_amount"),
+                            ("تكلفة الشراء:", "cost_basis"),
+                            ("الربح:", "profit"),
                             ("نسبة الربح (%):", "profit_percentage")]:
             ttk.Label(edit_window, text=label, font=("Cairo", 10, "bold")).grid(row=row, column=1, sticky="e", padx=5, pady=2)
             entry_field = ttk.Entry(edit_window, justify="right")
@@ -1611,6 +1764,7 @@ class HistoryWindow:
             entry_field.insert(0, str(entry.get(field, "")))
             fields[field] = entry_field
             row += 1
+
         def save_changes():
             try:
                 # تحديث البيانات
@@ -1623,7 +1777,7 @@ class HistoryWindow:
                 self.tree.item(selected_item, values=(
                     entry.get("date"), entry.get("operation"), entry.get("metal"), entry.get("quantity"),
                     entry.get("price_per_kg"), entry.get("total_price"), entry.get("person"),
-                    entry.get("paid_amount",""), entry.get("due_amount",""), entry.get("cost_basis",""), 
+                    entry.get("paid_amount",""), entry.get("due_amount",""), entry.get("cost_basis",""),
                     entry.get("profit",""), entry.get("profit_percentage","")
                 ))
                 # تحديث السجل في بيانات الطرف (المورد/العميل)
@@ -1649,6 +1803,7 @@ class HistoryWindow:
                 edit_window.destroy()
             except ValueError:
                 messagebox.showerror("خطأ", "يرجى إدخال قيم صحيحة.")
+
         btn_frame = ttk.Frame(edit_window)
         btn_frame.grid(row=row, column=0, columnspan=2, pady=10)
         ttk.Button(btn_frame, text="💾 حفظ", command=save_changes).pack(side=tk.RIGHT, padx=5)
@@ -1665,6 +1820,21 @@ class ExpensesWindow:
             except:
                 pass
         top.geometry("900x600")
+        # --- Apply Parent Theme Colors ---
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main) # Set dialog background
+
         # إطار الأدوات
         tool_frame = ttk.Frame(top)
         tool_frame.pack(fill=tk.X, padx=6, pady=6)
@@ -1672,6 +1842,7 @@ class ExpensesWindow:
         ttk.Button(tool_frame, text="🗑️ حذف مصروف", command=self.delete_expense).pack(side=tk.LEFT, padx=4)
         ttk.Button(tool_frame, text="⬇️ تصدير CSV", command=lambda: self.export_csv(expenses)).pack(side=tk.LEFT, padx=4)
         ttk.Button(tool_frame, text="⬇️ تصدير JSON", command=lambda: self.export_json(expenses)).pack(side=tk.LEFT, padx=4)
+
         # جدول المصروفات
         cols = ("date","name","amount","description")
         headers_ar = {
@@ -1692,11 +1863,13 @@ class ExpensesWindow:
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
         # ملء الجدول
         for i, e in enumerate(expenses):
             self.tree.insert("", "end", iid=i, values=(
                 e.get("date"), e.get("name"), e.get("amount"), e.get("description", "")
             ))
+
         self.expenses = expenses
         self.parent = parent
     def add_expense(self):
@@ -1718,7 +1891,6 @@ class ExpensesWindow:
             # --- FIX: Refresh the main window's table to update profit ---
             self.parent.refresh_table()
             # -----------------------------------------------------------
-
     def delete_expense(self):
         selected_item = self.tree.focus()
         if not selected_item:
@@ -1741,7 +1913,6 @@ class ExpensesWindow:
         # --- FIX: Refresh the main window's table to update profit ---
         self.parent.refresh_table()
         # -----------------------------------------------------------
-
     def export_csv(self, expenses):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
         if not path:
@@ -1772,6 +1943,21 @@ class AddExpenseDialog:
         top.geometry("400x200")
         top.transient(parent)
         top.grab_set()
+        # --- Apply Parent Theme Colors ---
+        if parent.winfo_toplevel().dark_mode: # Access parent's parent for theme
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
+
         ttk.Label(top, text="اسم المصروف:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
         self.e_name = ttk.Entry(top, justify="right")
         self.e_name.grid(row=0, column=1, pady=5, padx=5)
@@ -1814,11 +2000,27 @@ class PartiesWindow:
             except:
                 pass
         top.geometry("900x600")
+        # --- Apply Parent Theme Colors ---
+        if parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main) # Set dialog background
+
         # إطار الأدوات
         tool_frame = ttk.Frame(top)
         tool_frame.pack(fill=tk.X, padx=6, pady=6)
         ttk.Button(tool_frame, text="➕ إضافة حساب", command=self.add_party).pack(side=tk.LEFT, padx=4)
         ttk.Button(tool_frame, text="⬇️ تصدير CSV", command=lambda: self.export_csv(parties)).pack(side=tk.LEFT, padx=4)
+
         # جدول الحسابات
         cols = ("name","type","balance","transaction_count")
         headers_ar = {
@@ -1839,10 +2041,12 @@ class PartiesWindow:
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
         # ملء الجدول
         for name, info in parties.items():
             party_type = "مورد" if info.get("type") == "supplier" else "عميل"
             self.tree.insert("", "end", iid=name, values=(name, party_type, info.get("balance", 0.0), len(info.get("transactions", []))))
+
         self.tree.bind("<Double-1>", self.on_party_select)
         self.parties = parties
         self.parent = parent
@@ -1863,6 +2067,21 @@ class PartiesWindow:
                 top.attributes("-zoomed", True)
             except:
                 pass
+        # --- Apply Parent Theme Colors ---
+        if self.parent.dark_mode:
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
+
         frm = ttk.Frame(top, padding=10)
         frm.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frm, text=f"الاسم: {name}", font=("Cairo", 14, "bold")).grid(row=0, column=0, sticky="w")
@@ -1870,6 +2089,7 @@ class PartiesWindow:
         ttk.Label(frm, text=f"النوع: {party_type}").grid(row=1, column=0, sticky="w")
         ttk.Label(frm, text=f"الرصيد: {party_info.get('balance', 0.0)} جنيه").grid(row=2, column=0, sticky="w")
         ttk.Label(frm, text=f"عدد المعاملات: {len(party_info.get('transactions', []))}").grid(row=3, column=0, sticky="w")
+
         cols = ("date","operation","metal","quantity","total_price","paid_amount","due_amount","profit")
         headers_ar = {
             "date":"التاريخ",
@@ -1886,11 +2106,13 @@ class PartiesWindow:
             tree.heading(c, text=headers_ar.get(c,c))
             tree.column(c, anchor="center", width=100)
         tree.grid(row=4, column=0, columnspan=3, pady=8, sticky="nsew")
+
         for trans in party_info.get("transactions", []):
             tree.insert("", "end", values=(
                 trans.get("date"), trans.get("operation"), trans.get("metal"), trans.get("quantity"),
                 trans.get("total_price"), trans.get("paid_amount"), trans.get("due_amount"), trans.get("profit")
             ))
+
         btn_frame = ttk.Frame(frm)
         btn_frame.grid(row=5, column=0, pady=8, sticky="w")
         ttk.Button(btn_frame, text="❌ إغلاق", command=top.destroy).pack(side=tk.LEFT, padx=4)
@@ -1934,6 +2156,21 @@ class AddPartyDialog:
         top.geometry("400x150")
         top.transient(parent)
         top.grab_set()
+        # --- Apply Parent Theme Colors ---
+        if parent.winfo_toplevel().dark_mode: # Access parent's parent for theme
+            bg_main = "#1e1e2e"
+            bg_surface = "#2d2d44"
+            text_primary = "#ffffff"
+            accent_color = "#539bf5"
+            border_color = "#45456d"
+        else:
+            bg_main = "#f3f3f3"
+            bg_surface = "#ffffff"
+            text_primary = "#202020"
+            accent_color = "#0078d7"
+            border_color = "#d0d0d0"
+        top.configure(bg=bg_main)
+
         ttk.Label(top, text="اسم الحساب:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
         self.e_name = ttk.Entry(top, justify="right")
         self.e_name.grid(row=0, column=1, pady=5, padx=5)
@@ -1941,6 +2178,7 @@ class AddPartyDialog:
         self.cmb_type = ttk.Combobox(top, values=["مورد", "عميل"], state="readonly", justify="right")
         self.cmb_type.grid(row=1, column=1, pady=5, padx=5)
         self.cmb_type.current(0)
+
         btn_frame = ttk.Frame(top)
         btn_frame.grid(row=2, column=0, columnspan=2, pady=10)
         ttk.Button(btn_frame, text="➕ إضافة", command=self.on_add).pack(side=tk.RIGHT, padx=5)
@@ -1963,11 +2201,3 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
-
-
-
-
-
-
-
-
