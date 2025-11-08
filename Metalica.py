@@ -1462,7 +1462,7 @@ class RemoveStockDialog:
                     f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).
 "
                     "هل تريد تقسيم الكمية على دفعات متعددة؟"
-                )
+                ) # <-- Ensure closing parenthesis is on its own line or part of the f-string
                 if messagebox.askyesno("تأكيد", confirmation_msg):
                     # Attempt to split
                     transactions = self.split_quantity_over_lots(name, qty, price, person, paid, due)
