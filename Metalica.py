@@ -28,6 +28,7 @@
  - حذف المعدن لا يحذف السجلات أو العملاء أو الموردين
  - إضافة ميزة المصروفات/miscellaneous expenses
  - تصميم أزرار مع تدرج معدني
+ - تسجيل المعاملات المالية في حسابات العملاء والموردين
 """
 
 import os
@@ -207,6 +208,17 @@ def update_party_balance(parties, party_name, amount, transaction_type, is_suppl
     # إذا كانت معاملة بيع (لعميل)، نطرح المبلغ من الرصيد
     else:
         parties[party_name]["balance"] = round(parties[party_name]["balance"] - amount, 2)
+
+def add_transaction_to_party(parties, party_name, transaction, is_supplier=False):
+    """إضافة معاملة إلى حساب العميل أو المورد"""
+    if party_name not in parties:
+        parties[party_name] = {
+            "balance": 0.0,
+            "transactions": [],
+            "type": "supplier" if is_supplier else "customer"
+        }
+    
+    parties[party_name]["transactions"].append(transaction)
 
 # ---------------------------------------------------------------------
 # التطبيق الرئيسي
@@ -490,7 +502,7 @@ class MetalInventoryApp(tk.Tk):
             # حساب المبلغ الإجمالي
             total_amount = round(float(qty) * float(price), 2)
             
-            self.data["history"].append({
+            transaction = {
                 "date": now_iso(),
                 "operation": "إضافة معدن جديد",
                 "metal": name,
@@ -501,7 +513,12 @@ class MetalInventoryApp(tk.Tk):
                 "paid_amount": paid_amount,  # المبلغ المدفوع
                 "due_amount": due_amount,    # المبلغ المتبقي
                 "transaction_type": "purchase"  # نوع المعاملة
-            })
+            }
+            
+            self.data["history"].append(transaction)
+            
+            # إضافة المعاملة إلى حساب المورد
+            add_transaction_to_party(self.data["parties"], source, transaction, is_supplier=True)
             
             # تحديث رصيد المورد
             update_party_balance(self.data["parties"], source, due_amount, "purchase", is_supplier=True)
@@ -534,7 +551,7 @@ class MetalInventoryApp(tk.Tk):
             })
             metal["last_updated"] = now_iso()
             
-            self.data["history"].append({
+            transaction = {
                 "date": now_iso(),
                 "operation": "إضافة كمية",
                 "metal": name,
@@ -545,7 +562,12 @@ class MetalInventoryApp(tk.Tk):
                 "paid_amount": paid_amount,  # المبلغ المدفوع
                 "due_amount": due_amount,    # المبلغ المتبقي
                 "transaction_type": "purchase"  # نوع المعاملة
-            })
+            }
+            
+            self.data["history"].append(transaction)
+            
+            # إضافة المعاملة إلى حساب المورد
+            add_transaction_to_party(self.data["parties"], source, transaction, is_supplier=True)
             
             # تحديث رصيد المورد
             update_party_balance(self.data["parties"], source, due_amount, "purchase", is_supplier=True)
@@ -581,7 +603,7 @@ class MetalInventoryApp(tk.Tk):
             
             total_amount = round(qty * float(sale_price), 2)
             
-            self.data["history"].append({
+            transaction = {
                 "date": now_iso(),
                 "operation": "بيع / سحب كمية",
                 "metal": name,
@@ -595,7 +617,12 @@ class MetalInventoryApp(tk.Tk):
                 "paid_amount": paid_amount,
                 "due_amount": due_amount,
                 "transaction_type": "sale"
-            })
+            }
+            
+            self.data["history"].append(transaction)
+            
+            # إضافة المعاملة إلى حساب العميل
+            add_transaction_to_party(self.data["parties"], person, transaction, is_supplier=False)
             
             # تحديث رصيد العميل
             update_party_balance(self.data["parties"], person, due_amount, "sale", is_supplier=False)
