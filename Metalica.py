@@ -838,13 +838,14 @@ class MetalInventoryApp(tk.Tk):
     # -----------------------------------------------------------------
     # عرض التفاصيل والتعديل
     # -----------------------------------------------------------------
-    def refresh_table(self):
+   def refresh_table(self):
         q = self.search_var.get().strip()
         for i in self.tree.get_children():
             self.tree.delete(i)
         total_value = 0.0
         total_profit = 0.0
         total_revenue = 0.0
+        # حساب إجمالي المصروفات
         total_expenses = sum(e.get("amount", 0) for e in self.data.get("expenses", []))
         for m in self.data.get("metals", []):
             name = m.get("name","")
@@ -854,6 +855,7 @@ class MetalInventoryApp(tk.Tk):
             buy_price = float(m.get("price_per_kg", 0.0))  # تعديل: استخدام سعر الشراء
             value = round(qty * buy_price, 2)  # تعديل: حساب القيمة بسعر الشراء
             total_value += value
+            # تجميع الربح الإجمالي من المعادن فقط
             total_profit += float(m.get("profit_total", 0.0))
             last = m.get("last_updated","")
             sources_count = len(m.get("lots", []))
@@ -880,15 +882,16 @@ class MetalInventoryApp(tk.Tk):
                     self.tree.item(lot_id, tags=('subitem',))
         # تطبيق التنسيق على العناصر الفرعية
         self.tree.tag_configure('subitem', background='#f0f0f0' if not self.dark_mode else '#3a3a3a')
-        # حساب إجمالي الأرباح ونسبة الربح
+        # حساب إجمالي الأرباح ونسبة الربح من السجلات (لحسابات النسب المئوية)
         for h in self.data.get("history", []):
             if h.get("transaction_type") == "sale":
                 total_revenue += h.get("total_price", 0)
         profit_percentage = round((total_profit / total_revenue * 100) if total_revenue > 0 else 0, 2)
-        # حساب صافي الربح (الإيرادات - المصروفات)
+        # حساب صافي الربح (الإيرادات - المصروفات) أو (إجمالي الربح من المعادن - المصروفات)
         net_profit = total_profit - total_expenses
         net_profit_percentage = round((net_profit / total_revenue * 100) if total_revenue > 0 else 0, 2)
         self.total_value_label.config(text=f"إجمالي قيمة المخزون (سعر الشراء): {round(total_value,2)} جنيه")
+        # عرض صافي الربح في التسمية
         self.total_profit_label.config(text=f"صافي الربح: {round(net_profit,2)} جنيه ({net_profit_percentage}%)")
         backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_")])
         last = backups[-1] if backups else "-"
@@ -1949,6 +1952,7 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
 
