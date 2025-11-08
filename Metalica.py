@@ -1,3 +1,4 @@
+```python
 # metal_inventory.py
 # -*- coding: utf-8 -*-
 """
@@ -28,8 +29,9 @@
  - حذف المعدن لا يحذف السجلات أو العملاء أو الموردين
  - إضافة ميزة المصروفات/miscellaneous expenses
  - تصميم أزرار مع تدرج معدني
- - تحسين نظام الحسابات ليشمل جميع المعاملات المالية
- - جعل الرموز في الأزرار ملونة وواضحة
+ - تتبع المخزون وفقاً لنظام الدفعات (Lots) مع عرض الدفعات في الجدول الرئيسي
+ - عند النقر على المعدن، عرض/إخفاء الدفعات المختلفة
+ - تحديث السعر الرئيسي عند نفاد المخزون بالكامل
 """
 import os
 import json
@@ -38,6 +40,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
 import threading
+from collections import defaultdict
 
 # إعدادات الملفات
 DATA_FILE = "data.json"
@@ -183,13 +186,19 @@ def deduct_from_lots(metal, qty_to_remove):
                 "source": lot["source"],
                 "quantity": round(new_qty, 6),
                 "total_paid": round(new_total_paid, 2),
-                "date": lot.get("date")
+                "date": lot.get("date"),
+                "price_per_kg": lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
             }
             new_lots.append(new_lot)
             remaining = 0
     if remaining > 1e-9:
         raise ValueError("الكمية المطلوبة للسحب أكبر من المتوفر.")
-    metal["lots"] = new_lots
+    # حذف الدفعات التي نفدت كميتها
+    metal["lots"] = [lot for lot in new_lots if lot.get("quantity", 0) > 0]
+    # إذا أصبحت جميع الكميات صفرًا، نقوم بتحديث السعر الرئيسي
+    if metal_total_quantity(metal) == 0 and metal["lots"]:
+        metal["price_per_kg"] = metal["lots"][0].get("price_per_kg", 0.0)
+        metal["sale_price_per_kg"] = metal["price_per_kg"]
     return round(cost, 2)
 
 def update_party_balance(parties, party_name, amount, transaction_type, is_supplier=False, transaction_details=None):
@@ -239,6 +248,9 @@ class MetalInventoryApp(tk.Tk):
         self.refresh_table()
         start_auto_backup(self)
         self.protocol("WM_DELETE_WINDOW", self.on_exit)  # عند الإغلاق
+        
+        # لتتبع حالة عرض/إخفاء الدفعات
+        self.expanded_metals = set()
 
     def apply_theme(self):
         """تطبيق النمط حسب الوضع (فاتح أو مظلم)"""
@@ -428,6 +440,9 @@ class MetalInventoryApp(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         hsb.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        # ربط النقر على العنصر
+        self.tree.bind("<Button-1>", self.on_item_click)
         self.tree.bind("<Double-1>", self.on_item_double_click)
         
         # شريط الحالة السفلي
@@ -449,6 +464,40 @@ class MetalInventoryApp(tk.Tk):
             make_backup(self.data)
             messagebox.showinfo("تم", "تم إنشاء نسخة احتياطية بنجاح.")
         self.destroy()
+
+    # -----------------------------------------------------------------
+    # التعامل مع النقر على العناصر في الجدول
+    # -----------------------------------------------------------------
+    def on_item_click(self, event):
+        """التعامل مع النقر على العنصر في الجدول"""
+        region = self.tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        
+        item_id = self.tree.identify_row(event.y)
+        if not item_id:
+            return
+        
+        # التحقق مما إذا كان العنصر هو دفعة (وليس المعدن الرئيسي)
+        if item_id.startswith("lot_"):
+            return  # لا نقوم بأي إجراء عند النقر على الدفعات
+        
+        # عرض/إخفاء الدفعات عند النقر على المعدن
+        self.toggle_metal_lots(item_id)
+        
+        # منع التعامل مع النقر المزدوج
+        return "break"
+
+    def toggle_metal_lots(self, metal_name):
+        """عرض/إخفاء الدفعات المختلفة للمعدن المحدد"""
+        if metal_name in self.expanded_metals:
+            # إخفاء الدفعات
+            self.expanded_metals.remove(metal_name)
+            self.refresh_table()
+        else:
+            # عرض الدفعات
+            self.expanded_metals.add(metal_name)
+            self.refresh_table()
 
     # -----------------------------------------------------------------
     # بقية الوظائف (إضافة / بيع / السجل / تصدير / استيراد)
@@ -497,7 +546,8 @@ class MetalInventoryApp(tk.Tk):
                     "source": source or "مصدر افتراضي",
                     "quantity": float(qty),
                     "total_paid": total_paid,
-                    "date": now_iso()
+                    "date": now_iso(),
+                    "price_per_kg": float(price)
                 })
             
             self.data["metals"].append(m)
@@ -547,19 +597,30 @@ class MetalInventoryApp(tk.Tk):
                 return
             
             qty = float(qty)
+            current_total_qty = metal_total_quantity(metal)
+            
             if buy_price is None:
+                # إذا لم يتم تحديد سعر شراء، نستخدم السعر الحالي
                 buy_price = float(metal.get("price_per_kg", 0.0))
             else:
                 buy_price = float(buy_price)
             
             total_amount = round(qty * buy_price, 2)
             
-            metal["lots"].append({
+            # إذا كان المخزون الحالي صفرًا، نقوم بتحديث السعر الرئيسي
+            if current_total_qty == 0:
+                metal["price_per_kg"] = buy_price
+                metal["sale_price_per_kg"] = buy_price
+            
+            # إضافة دفعة جديدة
+            new_lot = {
                 "source": source or "مصدر افتراضي",
                 "quantity": qty,
                 "total_paid": total_amount,
-                "date": now_iso()
-            })
+                "date": now_iso(),
+                "price_per_kg": buy_price
+            }
+            metal["lots"].append(new_lot)
             
             metal["last_updated"] = now_iso()
             
@@ -667,7 +728,7 @@ class MetalInventoryApp(tk.Tk):
             messagebox.showwarning("تحذير", "يرجى تحديد معدن لحذفه.")
             return
         
-        metal_name = self.tree.item(selected_item, "values")[0]
+        metal_name = selected_item
         if not messagebox.askyesno("تأكيد الحذف", f"هل أنت متأكد من حذف المعدن '{metal_name}'؟"):
             return
         
@@ -745,7 +806,31 @@ class MetalInventoryApp(tk.Tk):
             last = m.get("last_updated","")
             sources_count = len(m.get("lots", []))
             
-            self.tree.insert("", "end", iid=name, values=(name, qty, m.get("price_per_kg",0.0), value, last, sources_count))
+            # إضافة المعدن الرئيسي
+            self.tree.insert("", "end", iid=name, values=(name, qty, buy_price, value, last, sources_count))
+            
+            # إذا كان العنصر مفتوحًا لعرض الدفعات
+            if name in self.expanded_metals:
+                for idx, lot in enumerate(m.get("lots", [])):
+                    lot_qty = lot.get("quantity", 0.0)
+                    lot_price = lot.get("price_per_kg", buy_price)
+                    lot_value = round(lot_qty * lot_price, 2)
+                    lot_date = lot.get("date", "")
+                    lot_id = f"lot_{name}_{idx}"
+                    # إضافة الدفعة كسطر فرعي
+                    self.tree.insert(name, "end", iid=lot_id, values=(
+                        f"↳ {lot.get('source', 'مصدر افتراضي')}",
+                        lot_qty,
+                        lot_price,
+                        lot_value,
+                        lot_date,
+                        ""
+                    ))
+                    # جعل السطر فرعيًا
+                    self.tree.item(lot_id, tags=('subitem',))
+        
+        # تطبيق التنسيق على العناصر الفرعية
+        self.tree.tag_configure('subitem', background='#f0f0f0' if not self.dark_mode else '#3a3a3a')
         
         # حساب إجمالي الأرباح ونسبة الربح
         for h in self.data.get("history", []):
@@ -769,7 +854,12 @@ class MetalInventoryApp(tk.Tk):
         if not item:
             return
         
-        name = item
+        # إذا كان العنصر هو دفعة، نحصل على اسم المعدن الرئيسي
+        if item.startswith("lot_"):
+            name = item.split("_", 2)[1]
+        else:
+            name = item
+        
         metal = next((m for m in self.data["metals"] if m["name"]==name), None)
         if not metal:
             return
@@ -794,17 +884,24 @@ class MetalInventoryApp(tk.Tk):
         ttk.Label(frm, text=f"إجمالي المدفوع: {metal_total_paid(metal)} جنيه").grid(row=4, column=0, sticky="w")
         ttk.Label(frm, text=f"الربح الإجمالي: {metal.get('profit_total',0.0)} جنيه").grid(row=5, column=0, sticky="w")
         
-        cols = ("source","quantity","total_paid","date")
+        cols = ("source","quantity","price_per_kg","total_paid","date")
         tree = ttk.Treeview(frm, columns=cols, show="headings", height=8)
         tree.heading("source", text="المصدر")
         tree.heading("quantity", text="الكمية (كجم)")
+        tree.heading("price_per_kg", text="سعر الشراء (جنيه/كجم)")
         tree.heading("total_paid", text="المبلغ المدفوع (جنيه)")
         tree.heading("date", text="تاريخ الإضافة")
         
         tree.grid(row=6, column=0, columnspan=3, pady=8, sticky="nsew")
         
         for lot in metal.get("lots", []):
-            tree.insert("", "end", values=(lot.get("source"), lot.get("quantity"), lot.get("total_paid"), lot.get("date")))
+            tree.insert("", "end", values=(
+                lot.get("source"), 
+                lot.get("quantity"), 
+                lot.get("price_per_kg", metal.get("price_per_kg", 0.0)),
+                lot.get("total_paid"), 
+                lot.get("date")
+            ))
         
         btn_frame = ttk.Frame(frm)
         btn_frame.grid(row=7, column=0, pady=8, sticky="w")
@@ -856,9 +953,15 @@ class MetalInventoryApp(tk.Tk):
         try:
             with open(path, "w", encoding="utf-8", newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(["المصدر","الكمية (كجم)","المبلغ المدفوع (جنيه)","تاريخ الإضافة"])
+                writer.writerow(["المصدر","الكمية (كجم)","سعر الشراء (جنيه/كجم)","المبلغ المدفوع (جنيه)","تاريخ الإضافة"])
                 for l in metal.get("lots", []):
-                    writer.writerow([l.get("source"), l.get("quantity"), l.get("total_paid"), l.get("date")])
+                    writer.writerow([
+                        l.get("source"), 
+                        l.get("quantity"), 
+                        l.get("price_per_kg", metal.get("price_per_kg", 0.0)),
+                        l.get("total_paid"), 
+                        l.get("date")
+                    ])
             messagebox.showinfo("تم", "تم تصدير البيانات.")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل التصدير: {e}")
@@ -1765,3 +1868,4 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+```
