@@ -29,7 +29,7 @@
  - إضافة ميزة المصروفات/miscellaneous expenses
  - تصميم أزرار مع تدرج معدني
  - تتبع المخزون وفقاً لنظام الدفعات (Lots) مع عرض الدفعات في الجدول الرئيسي
- - عند النقر على المعدن، عرض/إخفاء الدفعات المختلفة
+ - عند النقل على المعدن، عرض/إخفاء الدفعات المختلفة
  - دمج الدفعات التي لها نفس السعر
  - اختيار الدفعة عند البيع لاحتساب الربح بدقة
 """
@@ -1317,13 +1317,10 @@ class RemoveStockDialog:
             messagebox.showerror("خطأ", f"الكمية المتوفرة ({total_qty - remaining_qty}) أقل من الكمية المطلوبة ({total_qty}).")
             return None
         # إظهار ملخص للمستخدم
-        summary = "سيتم تقسيم البيع على الدفعات التالية:
-"
+        summary = f"سيتم تقسيم البيع على الدفعات التالية:\n"
         for lot_index, price, qty in used_lots:
-            summary += f"- الدفعة {lot_index}: {qty} كجم بسعر شراء {price} جنيه/كجم
-"
-        summary += f"
-إجمالي الربح المتوقع: {sum((sale_price - lot.get('price_per_kg', metal.get('price_per_kg', 0.0))) * qty for _, lot, qty in zip(used_lots, [metal['lots'][i] for i, _, _ in used_lots], [q for _, _, q in used_lots])):.2f} جنيه"
+            summary += f"- الدفعة {lot_index}: {qty} كجم بسعر شراء {price} جنيه/كجم\n"
+        summary += f"\nإجمالي الربح المتوقع: {sum((sale_price - lot.get('price_per_kg', metal.get('price_per_kg', 0.0))) * qty for _, lot, qty in zip(used_lots, [metal['lots'][i] for i, _, _ in used_lots], [q for _, _, q in used_lots])):.2f} جنيه"
         if not messagebox.askyesno("تأكيد التقسيم", summary):
             return None
         return transactions
