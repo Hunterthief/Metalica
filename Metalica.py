@@ -29,7 +29,7 @@
  - إضافة ميزة المصروفات/miscellaneous expenses
  - تصميم أزرار مع تدرج معدني
  - تتبع المخزون وفقاً لنظام الدفعات (Lots) مع عرض الدفعات في الجدول الرئيسي
- - عند النقل على المعدن، عرض/إخفاء الدفعات المختلفة
+ - عند النقر على المعدن، عرض/إخفاء الدفعات المختلفة
  - دمج الدفعات التي لها نفس السعر
  - اختيار الدفعة عند البيع لاحتساب الربح بدقة
 """
@@ -317,6 +317,11 @@ class MetalInventoryApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_exit)  # عند الإغلاق
         # لتتبع حالة عرض/إخفاء الدفعات
         self.expanded_metals = set()
+
+    def get_metal_names(self):
+        """إرجاع قائمة بأسماء المعادن الحالية من البيانات."""
+        return [m["name"] for m in self.data.get("metals", [])]
+
     def apply_theme(self):
         """تطبيق النمط حسب الوضع (فاتح أو مظلم)"""
         if self.dark_mode:
@@ -619,7 +624,7 @@ class MetalInventoryApp(tk.Tk):
             make_backup(self.data)
             self.refresh_table()
     def open_add_stock(self):
-        dialog = AddStockDialog(self, self.data.get("metals", []), self.data.get("parties", {}))
+        dialog = AddStockDialog(self, self.get_metal_names(), self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
             name, qty, buy_price, source, paid_amount, due_amount = dialog.result
@@ -679,7 +684,7 @@ class MetalInventoryApp(tk.Tk):
             make_backup(self.data)
             self.refresh_table()
     def open_remove_stock(self):
-        dialog = RemoveStockDialog(self, self.data.get("metals", []), self.data.get("parties", {}))
+        dialog = RemoveStockDialog(self, self.get_metal_names(), self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
             # إذا كانت النتيجة قائمة من المعاملات (عند تقسيم الكمية على مصادر متعددة)
@@ -754,20 +759,47 @@ class MetalInventoryApp(tk.Tk):
         update_party_balance(self.data["parties"], person, due_amount, "sale", is_supplier=False, transaction_details=transaction_details)
     def remove_metal(self):
         """حذف معدن من القائمة"""
-        selected_item = self.tree.focus()
-        if not selected_item:
-            messagebox.showwarning("تحذير", "يرجى تحديد معدن لحذفه.")
+        # إنشاء نافذة لحذف المعدن مع قائمة منسدلة
+        top = tk.Toplevel(self)
+        top.title("🗑️ حذف معدن")
+        top.geometry("400x150")
+        top.transient(self)
+        top.grab_set()
+
+        ttk.Label(top, text="اختر المعدن لحذفه:", font=("Cairo", 12, "bold")).pack(pady=10)
+        
+        metal_names = self.get_metal_names()
+        if not metal_names:
+            messagebox.showinfo("لا توجد معادن", "لا توجد معادن لحذفها.")
+            top.destroy()
             return
-        metal_name = selected_item
-        if not messagebox.askyesno("تأكيد الحذف", f"هل أنت متأكد من حذف المعدن '{metal_name}'؟"):
-            return
-        # حذف المعدن من البيانات فقط
-        self.data["metals"] = [m for m in self.data["metals"] if m["name"] != metal_name]
-        # لا نحذف السجلات أو الحسابات
-        save_data(self.data)
-        make_backup(self.data)
-        self.refresh_table()
-        messagebox.showinfo("تم", f"تم حذف المعدن '{metal_name}' بنجاح.")
+
+        metal_var = tk.StringVar()
+        cmb_metal = ttk.Combobox(top, values=metal_names, textvariable=metal_var, state="readonly", justify="right")
+        cmb_metal.pack(pady=10)
+        if metal_names:
+            cmb_metal.current(0) # تحديد أول معدن
+
+        def delete_selected():
+            selected_name = metal_var.get()
+            if not selected_name:
+                messagebox.showwarning("تحذير", "يرجى اختيار معدن.")
+                return
+            if not messagebox.askyesno("تأكيد الحذف", f"هل أنت متأكد من حذف المعدن '{selected_name}'؟"):
+                return
+            # حذف المعدن من البيانات فقط
+            self.data["metals"] = [m for m in self.data["metals"] if m["name"] != selected_name]
+            # لا نحذف السجلات أو الحسابات
+            save_data(self.data)
+            make_backup(self.data)
+            self.refresh_table()
+            messagebox.showinfo("تم", f"تم حذف المعدن '{selected_name}' بنجاح.")
+            top.destroy()
+
+        btn_frame = ttk.Frame(top)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="🗑️ حذف", command=delete_selected).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="❌ إلغاء", command=top.destroy).pack(side=tk.RIGHT, padx=5)
     def open_history_window(self):
         HistoryWindow(self, self.data.get("history", []))
     def open_parties_window(self):
@@ -1032,7 +1064,7 @@ class AddMetalDialog:
     def on_cancel(self):
         self.top.destroy()
 class AddStockDialog:
-    def __init__(self, parent, metals, parties):
+    def __init__(self, parent, metal_names, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("📦 إضافة كمية لمعدن موجود")
         top.geometry("450x350")
@@ -1042,7 +1074,8 @@ class AddStockDialog:
         supplier_names = [name for name, info in parties.items() if info.get("type") == "supplier"]
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
         self.metal_var = tk.StringVar()
-        names = [m["name"] for m in metals]
+        # استخدام القائمة المُمررة من parent بدلاً من self.parent.data
+        names = metal_names
         self.cmb = ttk.Combobox(top, values=names, textvariable=self.metal_var, state="readonly", justify="right")
         if names:
             self.cmb.current(0)
@@ -1072,6 +1105,7 @@ class AddStockDialog:
         ttk.Button(btn_frame, text="✅ تأكيد", command=self.on_ok).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
         self.result = None
+        self.parent = parent
     def on_ok(self):
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
@@ -1104,7 +1138,7 @@ class AddStockDialog:
     def on_cancel(self):
         self.top.destroy()
 class RemoveStockDialog:
-    def __init__(self, parent, metals, parties):
+    def __init__(self, parent, metal_names, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("💰 بيع / سحب كمية")
         top.geometry("450x450")
@@ -1118,7 +1152,8 @@ class RemoveStockDialog:
         self.lot_options = []
         # اختيار المعدن
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
-        names = [m["name"] for m in metals]
+        # استخدام القائمة المُمررة من parent بدلاً من self.parent.data
+        names = metal_names
         self.cmb_metal = ttk.Combobox(top, values=names, textvariable=self.metal_var, state="readonly", justify="right")
         if names:
             self.cmb_metal.current(0)
@@ -1170,7 +1205,7 @@ class RemoveStockDialog:
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
         self.result = None
         self.parent = parent
-        self.metals = metals
+        # self.metals = metals # تم إزالة هذا السطر
         self.parties = parties
     def on_metal_selected(self, event=None):
         """تحديث خيارات الدفعات عند تغيير المعدن"""
@@ -1181,7 +1216,8 @@ class RemoveStockDialog:
             self.prefill_quantity()
     def update_lot_options(self, metal_name):
         """تحديث قائمة الدفعات المتاحة للمعدن المحدد"""
-        metal = next((m for m in self.metals if m["name"] == metal_name), None)
+        # جلب البيانات مباشرة من parent
+        metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
         if not metal:
             self.lot_options = []
             self.cmb_lot['values'] = []
@@ -1211,7 +1247,8 @@ class RemoveStockDialog:
         try:
             lot_idx = int(lot_str.split(':')[0])
             metal_name = self.metal_var.get()
-            metal = next((m for m in self.metals if m["name"] == metal_name), None)
+            # جلب البيانات مباشرة من parent
+            metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
             if metal and lot_idx < len(metal.get("lots", [])):
                 lot = metal["lots"][lot_idx]
                 qty = lot.get("quantity", 0)
@@ -1255,7 +1292,8 @@ class RemoveStockDialog:
                 lot_index = int(lot_str.split(':')[0])
             except (ValueError, IndexError):
                 lot_index = None
-        metal = next((m for m in self.metals if m["name"] == name), None)
+        # جلب البيانات مباشرة من parent
+        metal = next((m for m in self.parent.data["metals"] if m["name"] == name), None)
         if not metal:
             messagebox.showerror("خطأ", "المعدن غير موجود.")
             return
