@@ -1458,11 +1458,7 @@ class RemoveStockDialog:
             # Validate quantity against specific lot if one is selected
             if qty > lot_qty:
                 # Quantity exceeds specific lot, ask for split or cancel
-                confirmation_msg = (
-                    f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).
-"
-                    "هل تريد تقسيم الكمية على دفعات متعددة؟"
-                ) # <-- Ensure closing parenthesis is on its own line or part of the f-string
+                confirmation_msg = f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).\nهل تريد تقسيم الكمية على دفعات متعددة؟"
                 if messagebox.askyesno("تأكيد", confirmation_msg):
                     # Attempt to split
                     transactions = self.split_quantity_over_lots(name, qty, price, person, paid, due)
@@ -1514,19 +1510,14 @@ class RemoveStockDialog:
             messagebox.showerror("خطأ", f"الكمية المتوفرة ({total_qty - remaining_qty:.6f}) أقل من الكمية المطلوبة ({total_qty}).")
             return None
         # Show summary before confirming split
-        summary = "سيتم تقسيم البيع على الدفعات التالية:
-"
+        summary = "سيتم تقسيم البيع على الدفعات التالية:\n"
         for lot_idx, qty_taken, price_per_kg in used_lots_summary:
-            summary += f"- دفعة {lot_idx}: {qty_taken:.6f} كجم @ {price_per_kg} جنيه/كجم
-"
+            summary += f"- دفعة {lot_idx}: {qty_taken:.6f} كجم @ {price_per_kg} جنيه/كجم\n"
         total_cost_basis = sum(qty * price for _, qty, price in used_lots_summary)
         total_revenue = total_qty * sale_price
         total_profit = total_revenue - total_cost_basis
-        summary += f"
-إجمالي تكلفة الشراء: {total_cost_basis:.2f} جنيه
-"
-        summary += f"إجمالي سعر البيع: {total_revenue:.2f} جنيه
-"
+        summary += f"\nإجمالي تكلفة الشراء: {total_cost_basis:.2f} جنيه\n"
+        summary += f"إجمالي سعر البيع: {total_revenue:.2f} جنيه\n"
         summary += f"إجمالي الربح المتوقع: {total_profit:.2f} جنيه"
         if not messagebox.askyesno("تأكيد التقسيم", summary):
             return None
