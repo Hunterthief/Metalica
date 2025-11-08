@@ -83,7 +83,7 @@ def load_data():
                             "quantity": qty,
                             "total_paid": total_paid,
                             "date": m.get("last_updated", now_iso()),
-                            "price_per_kg": float(m.get("price_per_kg", 0.0))
+                            "price_per_kg": float(m.get("price_per_kg", 0))
                         })
                     m["lots"] = lots
                 if "price_per_kg" not in m:
@@ -1176,16 +1176,15 @@ class RemoveStockDialog:
         """تحديث خيارات الدفعات عند تغيير المعدن"""
         metal_name = self.metal_var.get()
         self.update_lot_options(metal_name)
-        # تحديث الكمية عند تغيير المعدن
-        self.prefill_quantity()
+        if self.lot_options:
+            self.lot_var.set(self.lot_options[0])
+            self.prefill_quantity()
     def update_lot_options(self, metal_name):
         """تحديث قائمة الدفعات المتاحة للمعدن المحدد"""
         metal = next((m for m in self.metals if m["name"] == metal_name), None)
         if not metal:
             self.lot_options = []
             self.cmb_lot['values'] = []
-            self.cmb_lot.state(['disabled'])
-            self.lot_var.set("")
             return
         # إنشاء قائمة بالدفعات المتاحة مع كمياتها وأسعارها
         self.lot_options = []
@@ -1198,9 +1197,6 @@ class RemoveStockDialog:
         self.cmb_lot['values'] = self.lot_options
         if self.lot_options:
             self.cmb_lot.state(['!disabled'])
-            # إذا لم تكن هناك دفعة محددة حاليًا، حدد أول دفعة
-            if not self.lot_var.get() or self.lot_var.get() not in self.lot_options:
-                self.lot_var.set(self.lot_options[0])
         else:
             self.cmb_lot.state(['disabled'])
             self.lot_var.set("")
@@ -1270,8 +1266,11 @@ class RemoveStockDialog:
             requested_qty = float(qty)
             if requested_qty > lot_qty:
                 # الكمية المطلوبة أكبر من المتوفر في الدفعة المحددة
-                if messagebox.askyesno("تأكيد", f"الكمية المطلوبة ({requested_qty}) أكبر من المتوفر في هذه الدفعة ({lot_qty}).
-هل تريد تقسيم الكمية على دفعات متعددة؟"):
+                confirmation_msg = (
+                    f"الكمية المطلوبة ({requested_qty}) أكبر من المتوفر في هذه الدفعة ({lot_qty})."
+                    "\nهل تريد تقسيم الكمية على دفعات متعددة؟"
+                )
+                if messagebox.askyesno("تأكيد", confirmation_msg):
                     # تقسيم الكمية على دفعات متعددة
                     transactions = self.split_quantity_over_lots(metal, requested_qty, float(price), person, float(paid), float(due))
                     if transactions:
@@ -1854,4 +1853,3 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
-
