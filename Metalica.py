@@ -312,11 +312,14 @@ class MetalInventoryApp(tk.Tk):
         self.data = load_data()
         self.check_restore_on_start()
         self.create_widgets()
+        # --- FIX: Initialize expanded_metals BEFORE calling refresh_table ---
+        # لتتبع حالة عرض/إخفاء الدفعات
+        self.expanded_metals = set()
+        # --------------------------------------------------------------------
         self.refresh_table()
         start_auto_backup(self)
         self.protocol("WM_DELETE_WINDOW", self.on_exit)  # عند الإغلاق
-        # لتتبع حالة عرض/إخفاء الدفعات
-        self.expanded_metals = set()
+        # self.expanded_metals = set() # Move this line up before refresh_table()
 
     def get_metal_names(self):
         """إرجاع قائمة بأسماء المعادن الحالية من البيانات."""
@@ -1952,6 +1955,7 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
 
