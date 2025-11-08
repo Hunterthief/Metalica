@@ -1152,12 +1152,13 @@ class RemoveStockDialog:
         self.lot_options = []
         # اختيار المعدن
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
-        # استخدام القائمة المُمررة من parent بدلاً من self.parent.data
+        # استخدام القائمة المُمررة من parent فقط للقيم الأولية
         names = metal_names
         self.cmb_metal = ttk.Combobox(top, values=names, textvariable=self.metal_var, state="readonly", justify="right")
         if names:
             self.cmb_metal.current(0)
-            self.update_lot_options(names[0])
+            # تحديث الدفعات باستخدام القيم الحالية من parent
+            self.update_lot_options(self.metal_var.get())
         self.cmb_metal.grid(row=0, column=1, pady=5, padx=5)
         self.cmb_metal.bind("<<ComboboxSelected>>", self.on_metal_selected)
         # اختيار الدفعة
@@ -1167,7 +1168,8 @@ class RemoveStockDialog:
         self.cmb_lot.bind("<<ComboboxSelected>>", self.on_lot_selected)
         # تعبئة خيارات الدفعات أولًا
         if names:
-            self.update_lot_options(names[0])
+            # تحديث الدفعات باستخدام القيم الحالية من parent
+            self.update_lot_options(self.metal_var.get())
             if self.lot_options:
                 self.lot_var.set(self.lot_options[0])
         # الكمية
@@ -1222,6 +1224,8 @@ class RemoveStockDialog:
         if not metal:
             self.lot_options = []
             self.cmb_lot['values'] = []
+            self.cmb_lot.state(['disabled'])
+            self.lot_var.set("")
             return
         # إنشاء قائمة بالدفعات المتاحة مع كمياتها وأسعارها
         self.lot_options = []
@@ -1894,4 +1898,5 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
