@@ -1715,6 +1715,10 @@ class ExpensesWindow:
             # حفظ التغييرات في الملف
             save_data(self.parent.data)
             make_backup(self.parent.data)
+            # --- FIX: Refresh the main window's table to update profit ---
+            self.parent.refresh_table()
+            # -----------------------------------------------------------
+
     def delete_expense(self):
         selected_item = self.tree.focus()
         if not selected_item:
@@ -1734,6 +1738,10 @@ class ExpensesWindow:
         # حفظ التغييرات في الملف
         save_data(self.parent.data)
         make_backup(self.parent.data)
+        # --- FIX: Refresh the main window's table to update profit ---
+        self.parent.refresh_table()
+        # -----------------------------------------------------------
+
     def export_csv(self, expenses):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
         if not path:
@@ -1955,6 +1963,7 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
 
