@@ -30,7 +30,8 @@
  - تصميم أزرار مع تدرج معدني
  - تتبع المخزون وفقاً لنظام الدفعات (Lots) مع عرض الدفعات في الجدول الرئيسي
  - عند النقر على المعدن، عرض/إخفاء الدفعات المختلفة
- - تحديث السعر الرئيسي عند نفاد المخزون بالكامل
+ - دمج الدفعات التي لها نفس السعر
+ - اختيار الدفعة عند البيع لاحتساب الربح بدقة
 """
 import os
 import json
@@ -85,7 +86,8 @@ def load_data():
                             "source": src,
                             "quantity": qty,
                             "total_paid": total_paid,
-                            "date": m.get("last_updated", now_iso())
+                            "date": m.get("last_updated", now_iso()),
+                            "price_per_kg": float(m.get("price_per_kg", 0))
                         })
                     m["lots"] = lots
                 if "price_per_kg" not in m:
@@ -147,6 +149,33 @@ def save_settings(settings):
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
+def combine_lots_with_same_price(metal):
+    """دمج الدفعات التي لها نفس السعر"""
+    price_groups = defaultdict(list)
+    
+    # تجميع الدفعات حسب السعر
+    for lot in metal.get("lots", []):
+        price = round(lot.get("price_per_kg", metal.get("price_per_kg", 0.0)), 2)
+        price_groups[price].append(lot)
+    
+    # إنشاء دفعات جديدة مدمجة
+    new_lots = []
+    for price, lots in price_groups.items():
+        total_quantity = sum(lot.get("quantity", 0) for lot in lots)
+        total_paid = sum(lot.get("total_paid", 0) for lot in lots)
+        if total_quantity > 0:
+            # اختيار مصدر أول دفعة في المجموعة
+            first_lot = next(lot for lot in lots if lot.get("quantity", 0) > 0)
+            new_lots.append({
+                "source": first_lot.get("source", "مصدر افتراضي"),
+                "quantity": total_quantity,
+                "total_paid": total_paid,
+                "date": min(lot.get("date", now_iso()) for lot in lots),
+                "price_per_kg": price
+            })
+    
+    metal["lots"] = new_lots
+
 # ---------------------------------------------------------------------
 # دوال المساعدة
 # ---------------------------------------------------------------------
@@ -157,6 +186,40 @@ def metal_total_quantity(metal):
 def metal_total_paid(metal):
     """احسب إجمالي المبلغ المدفوع لكل المعدن"""
     return round(sum(l.get("total_paid", 0.0) for l in metal.get("lots", [])), 2)
+
+def deduct_from_specific_lot(metal, lot_index, qty_to_remove):
+    """خصم كمية من دفعة محددة وارجاع التكلفة"""
+    if lot_index >= len(metal["lots"]):
+        raise ValueError("الدفعة المحددة غير موجودة")
+    
+    lot = metal["lots"][lot_index]
+    lot_qty = float(lot.get("quantity", 0.0))
+    lot_paid = float(lot.get("total_paid", 0.0))
+    lot_price = float(lot.get("price_per_kg", metal.get("price_per_kg", 0.0)))
+    
+    if qty_to_remove > lot_qty + 1e-9:
+        raise ValueError(f"الكمية المطلوبة ({qty_to_remove}) أكبر من المتوفر في الدفعة ({lot_qty})")
+    
+    # حساب التكلفة
+    cost = round(qty_to_remove * lot_price, 2)
+    
+    # تحديث الدفعة
+    new_qty = lot_qty - qty_to_remove
+    new_total_paid = lot_paid - cost
+    
+    if new_qty > 0:
+        metal["lots"][lot_index]["quantity"] = round(new_qty, 6)
+        metal["lots"][lot_index]["total_paid"] = round(new_total_paid, 2)
+    else:
+        # حذف الدفعة إذا نفدت كميتها
+        metal["lots"].pop(lot_index)
+    
+    # إذا أصبحت جميع الكميات صفرًا، نقوم بتحديث السعر الرئيسي
+    if metal_total_quantity(metal) == 0 and metal["lots"]:
+        metal["price_per_kg"] = metal["lots"][0].get("price_per_kg", 0.0)
+        metal["sale_price_per_kg"] = metal["price_per_kg"]
+    
+    return cost
 
 def deduct_from_lots(metal, qty_to_remove):
     """خصم كمية من المخزون (FIFO) وارجاع التكلفة"""
@@ -169,16 +232,17 @@ def deduct_from_lots(metal, qty_to_remove):
             continue
         lot_qty = float(lot.get("quantity", 0.0))
         lot_paid = float(lot.get("total_paid", 0.0))
+        lot_price = float(lot.get("price_per_kg", metal.get("price_per_kg", 0.0)))
         if lot_qty <= 0:
             new_lots.append(lot)
             continue
         if lot_qty <= remaining + 1e-9:
-            cost += lot_paid
+            cost += round(lot_qty * lot_price, 2)
             remaining -= lot_qty
         else:
             portion = remaining / lot_qty
             part_paid = lot_paid * portion
-            cost += part_paid
+            cost += round(remaining * lot_price, 2)
             new_qty = lot_qty - remaining
             new_total_paid = lot_paid - part_paid
             new_lot = {
@@ -186,7 +250,7 @@ def deduct_from_lots(metal, qty_to_remove):
                 "quantity": round(new_qty, 6),
                 "total_paid": round(new_total_paid, 2),
                 "date": lot.get("date"),
-                "price_per_kg": lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
+                "price_per_kg": lot_price
             }
             new_lots.append(new_lot)
             remaining = 0
@@ -199,6 +263,48 @@ def deduct_from_lots(metal, qty_to_remove):
         metal["price_per_kg"] = metal["lots"][0].get("price_per_kg", 0.0)
         metal["sale_price_per_kg"] = metal["price_per_kg"]
     return round(cost, 2)
+
+def deduct_from_lots_with_multiple_sources(metal, qty_to_remove):
+    """خصم كمية من المخزون من مصادر متعددة إذا لزم الأمر"""
+    remaining = qty_to_remove
+    cost = 0.0
+    sources_used = []
+    
+    # خصم الكمية من الدفعات المتاحة حتى يتم استيفاء الكمية المطلوبة
+    while remaining > 0 and metal["lots"]:
+        lot = metal["lots"][0]  # نبدأ بأول دفعة (FIFO)
+        lot_qty = float(lot.get("quantity", 0.0))
+        lot_price = float(lot.get("price_per_kg", metal.get("price_per_kg", 0.0)))
+        
+        if lot_qty <= 0:
+            metal["lots"].pop(0)
+            continue
+        
+        if lot_qty <= remaining:
+            # استخدام الكمية كاملة من هذه الدفعة
+            cost += round(lot_qty * lot_price, 2)
+            remaining -= lot_qty
+            sources_used.append((lot.get("source", ""), lot_qty, lot_price))
+            metal["lots"].pop(0)
+        else:
+            # استخدام جزء من الكمية من هذه الدفعة
+            cost += round(remaining * lot_price, 2)
+            new_qty = lot_qty - remaining
+            new_total_paid = round(new_qty * lot_price, 2)
+            lot["quantity"] = new_qty
+            lot["total_paid"] = new_total_paid
+            sources_used.append((lot.get("source", ""), remaining, lot_price))
+            remaining = 0
+    
+    if remaining > 1e-9:
+        raise ValueError("الكمية المطلوبة للسحب أكبر من المتوفر.")
+    
+    # إذا أصبحت جميع الكميات صفرًا، نقوم بتحديث السعر الرئيسي
+    if metal_total_quantity(metal) == 0 and metal["lots"]:
+        metal["price_per_kg"] = metal["lots"][0].get("price_per_kg", 0.0)
+        metal["sale_price_per_kg"] = metal["price_per_kg"]
+    
+    return round(cost, 2), sources_used
 
 def update_party_balance(parties, party_name, amount, transaction_type, is_supplier=False, transaction_details=None):
     """تحديث رصيد العميل/المورد وإضافة تفصيل المعاملة"""
@@ -621,6 +727,9 @@ class MetalInventoryApp(tk.Tk):
             }
             metal["lots"].append(new_lot)
             
+            # دمج الدفعات التي لها نفس السعر
+            combine_lots_with_same_price(metal)
+            
             metal["last_updated"] = now_iso()
             
             # إضافة تفصيل المعاملة
@@ -658,67 +767,85 @@ class MetalInventoryApp(tk.Tk):
         dialog = RemoveStockDialog(self, self.data.get("metals", []), self.data.get("parties", {}))
         self.wait_window(dialog.top)
         if dialog.result:
-            name, qty, sale_price, person, paid_amount, due_amount = dialog.result
-            metal = next((m for m in self.data["metals"] if m["name"]==name), None)
-            if not metal:
-                messagebox.showerror("خطأ", "المعدن غير موجود.")
-                return
-            
-            qty = float(qty)
-            total_available = metal_total_quantity(metal)
-            if qty > total_available:
-                messagebox.showerror("خطأ", "الكمية المسحوبة أكبر من المتوفر.")
-                return
-            
-            revenue = round(qty * float(sale_price), 2)
-            try:
-                cost_basis = deduct_from_lots(metal, qty)
-            except Exception as e:
-                messagebox.showerror("خطأ", f"خطأ في خصم الكمية: {e}")
-                return
-            
-            profit = round(revenue - cost_basis, 2)
-            profit_percentage = round((profit / revenue * 100) if revenue > 0 else 0, 2)
-            metal["profit_total"] = round(metal.get("profit_total", 0.0) + profit, 2)
-            metal["last_updated"] = now_iso()
-            
-            total_amount = round(qty * float(sale_price), 2)
-            
-            # إضافة تفصيل المعاملة
-            transaction_details = {
-                "operation": "بيع / سحب كمية",
-                "metal": name,
-                "quantity": qty,
-                "price_per_kg": float(sale_price),
-                "total_price": revenue,
-                "cost_basis": cost_basis,
-                "profit": profit,
-                "paid_amount": paid_amount,
-                "due_amount": due_amount
-            }
-            
-            self.data["history"].append({
-                "date": now_iso(),
-                "operation": "بيع / سحب كمية",
-                "metal": name,
-                "quantity": qty,
-                "price_per_kg": float(sale_price),
-                "total_price": revenue,
-                "person": person,
-                "cost_basis": cost_basis,
-                "profit": profit,
-                "profit_percentage": profit_percentage,
-                "paid_amount": paid_amount,
-                "due_amount": due_amount,
-                "transaction_type": "sale"
-            })
-            
-            # تحديث رصيد العميل وإضافة تفصيل المعاملة
-            update_party_balance(self.data["parties"], person, due_amount, "sale", is_supplier=False, transaction_details=transaction_details)
+            # إذا كانت النتيجة قائمة من المعاملات (عند تقسيم الكمية على مصادر متعددة)
+            if isinstance(dialog.result, list):
+                for transaction in dialog.result:
+                    if not transaction:
+                        continue
+                    self.process_single_transaction(transaction)
+            else:
+                # معاملة واحدة
+                if dialog.result:
+                    self.process_single_transaction(dialog.result)
             
             save_data(self.data)
             make_backup(self.data)
             self.refresh_table()
+
+    def process_single_transaction(self, transaction):
+        """معالجة معاملة واحدة للبيع"""
+        name, qty, sale_price, person, paid_amount, due_amount, lot_index = transaction
+        metal = next((m for m in self.data["metals"] if m["name"]==name), None)
+        if not metal:
+            messagebox.showerror("خطأ", "المعدن غير موجود.")
+            return
+        
+        qty = float(qty)
+        total_available = metal_total_quantity(metal)
+        if qty > total_available:
+            messagebox.showerror("خطأ", "الكمية المسحوبة أكبر من المتوفر.")
+            return
+        
+        revenue = round(qty * float(sale_price), 2)
+        try:
+            if lot_index is not None:
+                # خصم من دفعة محددة
+                cost_basis = deduct_from_specific_lot(metal, lot_index, qty)
+            else:
+                # خصم من الدفعات المتاحة (FIFO)
+                cost_basis = deduct_from_lots(metal, qty)
+        except Exception as e:
+            messagebox.showerror("خطأ", f"خطأ في خصم الكمية: {e}")
+            return
+        
+        profit = round(revenue - cost_basis, 2)
+        profit_percentage = round((profit / revenue * 100) if revenue > 0 else 0, 2)
+        metal["profit_total"] = round(metal.get("profit_total", 0.0) + profit, 2)
+        metal["last_updated"] = now_iso()
+        
+        total_amount = round(qty * float(sale_price), 2)
+        
+        # إضافة تفصيل المعاملة
+        transaction_details = {
+            "operation": "بيع / سحب كمية",
+            "metal": name,
+            "quantity": qty,
+            "price_per_kg": float(sale_price),
+            "total_price": revenue,
+            "cost_basis": cost_basis,
+            "profit": profit,
+            "paid_amount": paid_amount,
+            "due_amount": due_amount
+        }
+        
+        self.data["history"].append({
+            "date": now_iso(),
+            "operation": "بيع / سحب كمية",
+            "metal": name,
+            "quantity": qty,
+            "price_per_kg": float(sale_price),
+            "total_price": revenue,
+            "person": person,
+            "cost_basis": cost_basis,
+            "profit": profit,
+            "profit_percentage": profit_percentage,
+            "paid_amount": paid_amount,
+            "due_amount": due_amount,
+            "transaction_type": "sale"
+        })
+        
+        # تحديث رصيد العميل وإضافة تفصيل المعاملة
+        update_party_balance(self.data["parties"], person, due_amount, "sale", is_supplier=False, transaction_details=transaction_details)
 
     def remove_metal(self):
         """حذف معدن من القائمة"""
@@ -818,7 +945,7 @@ class MetalInventoryApp(tk.Tk):
                     lot_id = f"lot_{name}_{idx}"
                     # إضافة الدفعة كسطر فرعي
                     self.tree.insert(name, "end", iid=lot_id, values=(
-                        f"↳ {lot.get('source', 'مصدر افتراضي')}",
+                        f"↳ {lot.get('source', 'مصدر افتراضي')} @ {lot_price} جنيه",
                         lot_qty,
                         lot_price,
                         lot_value,
@@ -1152,56 +1279,143 @@ class RemoveStockDialog:
     def __init__(self, parent, metals, parties):
         top = self.top = tk.Toplevel(parent)
         top.title("💰 بيع / سحب كمية")
-        top.geometry("450x350")
+        top.geometry("450x450")
         top.transient(parent)
         top.grab_set()
         
         # قائمة العملاء
         customer_names = [name for name, info in parties.items() if info.get("type") == "customer"]
         
-        ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
+        # المتغيرات
         self.metal_var = tk.StringVar()
+        self.lot_var = tk.StringVar()
+        self.lot_options = []
+        
+        # اختيار المعدن
+        ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
         names = [m["name"] for m in metals]
-        self.cmb = ttk.Combobox(top, values=names, textvariable=self.metal_var, state="readonly", justify="right")
+        self.cmb_metal = ttk.Combobox(top, values=names, textvariable=self.metal_var, state="readonly", justify="right")
         if names:
-            self.cmb.current(0)
-        self.cmb.grid(row=0, column=1, pady=5, padx=5)
+            self.cmb_metal.current(0)
+            self.update_lot_options(names[0])
+        self.cmb_metal.grid(row=0, column=1, pady=5, padx=5)
+        self.cmb_metal.bind("<<ComboboxSelected>>", self.on_metal_selected)
         
-        ttk.Label(top, text="الكمية (كجم):", font=("Cairo", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        # اختيار الدفعة
+        ttk.Label(top, text="اختر الدفعة:", font=("Cairo", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        self.cmb_lot = ttk.Combobox(top, textvariable=self.lot_var, state="readonly", justify="right")
+        self.cmb_lot.grid(row=1, column=1, pady=5, padx=5)
+        self.cmb_lot.bind("<<ComboboxSelected>>", self.on_lot_selected)
+        
+        # تعبئة خيارات الدفعات أولًا
+        if names:
+            self.update_lot_options(names[0])
+            if self.lot_options:
+                self.lot_var.set(self.lot_options[0])
+        
+        # الكمية
+        ttk.Label(top, text="الكمية (كجم):", font=("Cairo", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=5)
         self.e_qty = ttk.Entry(top, justify="right")
-        self.e_qty.grid(row=1, column=1, pady=5, padx=5)
+        self.e_qty.grid(row=2, column=1, pady=5, padx=5)
         
-        ttk.Label(top, text="سعر البيع لكل كجم (جنيه):", font=("Cairo", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        # سعر البيع
+        ttk.Label(top, text="سعر البيع لكل كجم (جنيه):", font=("Cairo", 10, "bold")).grid(row=3, column=0, sticky="e", padx=5, pady=5)
         self.e_price = ttk.Entry(top, justify="right")
-        self.e_price.grid(row=2, column=1, pady=5, padx=5)
+        self.e_price.grid(row=3, column=1, pady=5, padx=5)
         
-        ttk.Label(top, text="العميل:", font=("Cairo", 10, "bold")).grid(row=3, column=0, sticky="e", padx=5, pady=5)
+        # العميل
+        ttk.Label(top, text="العميل:", font=("Cairo", 10, "bold")).grid(row=4, column=0, sticky="e", padx=5, pady=5)
         self.customer_var = tk.StringVar()
         self.cmb_customer = ttk.Combobox(top, values=customer_names, textvariable=self.customer_var, justify="right")
-        self.cmb_customer.grid(row=3, column=1, pady=5, padx=5)
+        self.cmb_customer.grid(row=4, column=1, pady=5, padx=5)
         
         # حقل إدخال العميل الجديد
-        ttk.Label(top, text="أو أدخل عميل جديد:", font=("Cairo", 10, "bold")).grid(row=4, column=0, sticky="e", padx=5, pady=5)
+        ttk.Label(top, text="أو أدخل عميل جديد:", font=("Cairo", 10, "bold")).grid(row=5, column=0, sticky="e", padx=5, pady=5)
         self.e_new_customer = ttk.Entry(top, justify="right")
-        self.e_new_customer.grid(row=4, column=1, pady=5, padx=5)
+        self.e_new_customer.grid(row=5, column=1, pady=5, padx=5)
         
-        ttk.Label(top, text="المبلغ المدفوع:", font=("Cairo", 10, "bold")).grid(row=5, column=0, sticky="e", padx=5, pady=5)
+        # المبلغ المدفوع
+        ttk.Label(top, text="المبلغ المدفوع:", font=("Cairo", 10, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
         self.e_paid = ttk.Entry(top, justify="right")
-        self.e_paid.grid(row=5, column=1, pady=5, padx=5)
+        self.e_paid.grid(row=6, column=1, pady=5, padx=5)
         
-        ttk.Label(top, text="المبلغ المتبقي:", font=("Cairo", 10, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
+        # المبلغ المتبقي
+        ttk.Label(top, text="المبلغ المتبقي:", font=("Cairo", 10, "bold")).grid(row=7, column=0, sticky="e", padx=5, pady=5)
         self.e_due = ttk.Entry(top, justify="right")
-        self.e_due.grid(row=6, column=1, pady=5, padx=5)
+        self.e_due.grid(row=7, column=1, pady=5, padx=5)
         
+        # تحديد كمية افتراضية إذا كان هناك دفعات
+        if self.lot_options:
+            self.prefill_quantity()
+        
+        # الأزرار
         btn_frame = ttk.Frame(top)
-        btn_frame.grid(row=7, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
         
         ttk.Button(btn_frame, text="✅ تأكيد", command=self.on_ok).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
         
         self.result = None
+        self.parent = parent
+        self.metals = metals
+        self.parties = parties
+
+    def on_metal_selected(self, event=None):
+        """تحديث خيارات الدفعات عند تغيير المعدن"""
+        metal_name = self.metal_var.get()
+        self.update_lot_options(metal_name)
+        if self.lot_options:
+            self.lot_var.set(self.lot_options[0])
+            self.prefill_quantity()
+
+    def update_lot_options(self, metal_name):
+        """تحديث قائمة الدفعات المتاحة للمعدن المحدد"""
+        metal = next((m for m in self.metals if m["name"] == metal_name), None)
+        if not metal:
+            self.lot_options = []
+            self.cmb_lot['values'] = []
+            return
+        
+        # إنشاء قائمة بالدفعات المتاحة مع كمياتها وأسعارها
+        self.lot_options = []
+        for idx, lot in enumerate(metal.get("lots", [])):
+            qty = lot.get("quantity", 0)
+            price = lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
+            if qty > 0:
+                self.lot_options.append(f"{idx}: {qty} كجم @ {price} جنيه")
+        
+        # تحديث كومبوبوكس الدفعات
+        self.cmb_lot['values'] = self.lot_options
+        if self.lot_options:
+            self.cmb_lot.state(['!disabled'])
+        else:
+            self.cmb_lot.state(['disabled'])
+            self.lot_var.set("")
+
+    def on_lot_selected(self, event=None):
+        """تحديث حقل الكمية عند اختيار دفعة"""
+        self.prefill_quantity()
+
+    def prefill_quantity(self):
+        """تعبئة الكمية افتراضيًا بأقصى كمية متاحة في الدفعة المحددة"""
+        lot_str = self.lot_var.get()
+        if not lot_str:
+            return
+        
+        try:
+            lot_idx = int(lot_str.split(':')[0])
+            metal_name = self.metal_var.get()
+            metal = next((m for m in self.metals if m["name"] == metal_name), None)
+            if metal and lot_idx < len(metal.get("lots", [])):
+                lot = metal["lots"][lot_idx]
+                qty = lot.get("quantity", 0)
+                self.e_qty.delete(0, tk.END)
+                self.e_qty.insert(0, str(qty))
+        except (ValueError, IndexError):
+            pass
 
     def on_ok(self):
+        """معالجة النقر على زر التأكيد"""
         name = self.metal_var.get().strip()
         qty = self.e_qty.get().strip()
         price = self.e_price.get().strip()
@@ -1234,8 +1448,96 @@ class RemoveStockDialog:
             messagebox.showerror("خطأ", "قيمة رقمية خاطئة.")
             return
         
-        self.result = (name, qty, float(price), person, float(paid), float(due))
+        # الحصول على فهرس الدفعة المحددة
+        lot_str = self.lot_var.get()
+        lot_index = None
+        if lot_str:
+            try:
+                lot_index = int(lot_str.split(':')[0])
+            except (ValueError, IndexError):
+                lot_index = None
+        
+        metal = next((m for m in self.metals if m["name"] == name), None)
+        if not metal:
+            messagebox.showerror("خطأ", "المعدن غير موجود.")
+            return
+        
+        # التحقق من الكمية
+        if lot_index is not None and lot_index < len(metal.get("lots", [])):
+            lot = metal["lots"][lot_index]
+            lot_qty = lot.get("quantity", 0)
+            requested_qty = float(qty)
+            
+            if requested_qty > lot_qty:
+                # الكمية المطلوبة أكبر من المتوفر في الدفعة المحددة
+                if messagebox.askyesno("تأكيد", f"الكمية المطلوبة ({requested_qty}) أكبر من المتوفر في هذه الدفعة ({lot_qty}).\nهل تريد تقسيم الكمية على دفعات متعددة؟"):
+                    # تقسيم الكمية على دفعات متعددة
+                    transactions = self.split_quantity_over_lots(metal, requested_qty, float(price), person, float(paid), float(due))
+                    if transactions:
+                        self.result = transactions
+                        self.top.destroy()
+                        return
+                else:
+                    return
+        
+        # إذا لم يتم تقسيم الكمية أو لم يتم تجاوز الكمية في الدفعة
+        self.result = (name, qty, float(price), person, float(paid), float(due), lot_index)
         self.top.destroy()
+
+    def split_quantity_over_lots(self, metal, total_qty, sale_price, person, paid_amount, due_amount):
+        """تقسيم كمية البيع على دفعات متعددة"""
+        remaining_qty = total_qty
+        transactions = []
+        used_lots = []
+        
+        # فرز الدفعات حسب التاريخ (FIFO) أو حسب السعر الأقل
+        lots = sorted(enumerate(metal.get("lots", [])), key=lambda x: x[1].get("date", ""))
+        
+        for lot_index, lot in lots:
+            if remaining_qty <= 0 or lot.get("quantity", 0) <= 0:
+                continue
+            
+            lot_qty = lot.get("quantity", 0)
+            qty_to_take = min(remaining_qty, lot_qty)
+            
+            # حساب الربح لهذه الدفعة
+            lot_price = lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
+            cost_basis = round(qty_to_take * lot_price, 2)
+            revenue = round(qty_to_take * sale_price, 2)
+            profit = round(revenue - cost_basis, 2)
+            
+            # حساب المبالغ المدفوعة والمطلوبة لهذه الدفعة
+            portion_paid = round(paid_amount * (qty_to_take / total_qty), 2)
+            portion_due = round(due_amount * (qty_to_take / total_qty), 2)
+            
+            transactions.append((
+                metal["name"],
+                qty_to_take,
+                sale_price,
+                person,
+                portion_paid,
+                portion_due,
+                lot_index
+            ))
+            
+            used_lots.append((lot_index, lot_price, qty_to_take))
+            remaining_qty -= qty_to_take
+        
+        if remaining_qty > 1e-9:
+            messagebox.showerror("خطأ", f"الكمية المتوفرة ({total_qty - remaining_qty}) أقل من الكمية المطلوبة ({total_qty}).")
+            return None
+        
+        # إظهار ملخص للمستخدم
+        summary = "سيتم تقسيم البيع على الدفعات التالية:\n\n"
+        for lot_index, price, qty in used_lots:
+            summary += f"- الدفعة {lot_index}: {qty} كجم بسعر شراء {price} جنيه/كجم\n"
+        
+        summary += f"\nإجمالي الربح المتوقع: {sum((sale_price - lot.get('price_per_kg', metal.get('price_per_kg', 0.0))) * qty for _, lot, qty in zip(used_lots, [metal['lots'][i] for i, _, _ in used_lots], [q for _, _, q in used_lots])):.2f} جنيه"
+        
+        if not messagebox.askyesno("تأكيد التقسيم", summary):
+            return None
+        
+        return transactions
 
     def on_cancel(self):
         self.top.destroy()
