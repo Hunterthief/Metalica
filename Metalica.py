@@ -1144,139 +1144,157 @@ class RemoveStockDialog:
         top.geometry("450x450")
         top.transient(parent)
         top.grab_set()
-        # المتغيرات
+
+        # --- Fetch current data from parent ---
+        self.parent = parent
+        # Use the passed metal_names and parties, assuming they are current at call time
+        self.metal_names = metal_names
+        self.parties = parties
+
+        # --- Customer Names ---
+        self.customer_names = [name for name, info in self.parties.items() if info.get("type") == "customer"]
+
+        # --- Variables ---
         self.metal_var = tk.StringVar()
         self.lot_var = tk.StringVar()
-        self.lot_options = []
-        # اختيار المعدن - استخدام metal_names المُمررة
+        self.lot_options_map = {}  # Maps display string to (lot_index, lot_quantity, lot_price)
+
+        # --- Layout ---
+        # Row 0: Metal Selection
         ttk.Label(top, text="اختر المعدن:", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=5)
-        self.cmb_metal = ttk.Combobox(top, values=metal_names, textvariable=self.metal_var, state="readonly", justify="right")
-        if metal_names: # تأكد من أن هناك معادن
-            self.cmb_metal.current(0)
-            # تحديث الدفعات بناءً على المعدن المحدد فورًا
-            self.update_lot_options(self.metal_var.get())
+        self.cmb_metal = ttk.Combobox(top, values=self.metal_names, textvariable=self.metal_var, state="readonly", justify="right")
         self.cmb_metal.grid(row=0, column=1, pady=5, padx=5)
         self.cmb_metal.bind("<<ComboboxSelected>>", self.on_metal_selected)
-        # اختيار الدفعة
+
+        # Row 1: Lot Selection
         ttk.Label(top, text="اختر الدفعة:", font=("Cairo", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=5)
         self.cmb_lot = ttk.Combobox(top, textvariable=self.lot_var, state="readonly", justify="right")
         self.cmb_lot.grid(row=1, column=1, pady=5, padx=5)
         self.cmb_lot.bind("<<ComboboxSelected>>", self.on_lot_selected)
-        # تعبئة خيارات الدفعات أولًا إذا كان هناك معدن محدد
-        if metal_names:
-            self.update_lot_options(self.metal_var.get())
-            if self.lot_options:
-                self.lot_var.set(self.lot_options[0])
-        # الكمية
+
+        # Row 2: Quantity
         ttk.Label(top, text="الكمية (كجم):", font=("Cairo", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=5)
         self.e_qty = ttk.Entry(top, justify="right")
         self.e_qty.grid(row=2, column=1, pady=5, padx=5)
-        # سعر البيع
+
+        # Row 3: Sale Price
         ttk.Label(top, text="سعر البيع لكل كجم (جنيه):", font=("Cairo", 10, "bold")).grid(row=3, column=0, sticky="e", padx=5, pady=5)
         self.e_price = ttk.Entry(top, justify="right")
         self.e_price.grid(row=3, column=1, pady=5, padx=5)
-        # قائمة العملاء - استخدام parties المُمررة
-        customer_names = [name for name, info in parties.items() if info.get("type") == "customer"]
+
+        # Row 4: Customer Selection
         ttk.Label(top, text="العميل:", font=("Cairo", 10, "bold")).grid(row=4, column=0, sticky="e", padx=5, pady=5)
         self.customer_var = tk.StringVar()
-        self.cmb_customer = ttk.Combobox(top, values=customer_names, textvariable=self.customer_var, justify="right")
+        self.cmb_customer = ttk.Combobox(top, values=self.customer_names, textvariable=self.customer_var, justify="right")
         self.cmb_customer.grid(row=4, column=1, pady=5, padx=5)
-        # حقل إدخال العميل الجديد
+
+        # Row 5: New Customer
         ttk.Label(top, text="أو أدخل عميل جديد:", font=("Cairo", 10, "bold")).grid(row=5, column=0, sticky="e", padx=5, pady=5)
         self.e_new_customer = ttk.Entry(top, justify="right")
         self.e_new_customer.grid(row=5, column=1, pady=5, padx=5)
-        # المبلغ المدفوع
+
+        # Row 6: Amount Paid
         ttk.Label(top, text="المبلغ المدفوع:", font=("Cairo", 10, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
         self.e_paid = ttk.Entry(top, justify="right")
         self.e_paid.grid(row=6, column=1, pady=5, padx=5)
-        # المبلغ المتبقي
+
+        # Row 7: Amount Due
         ttk.Label(top, text="المبلغ المتبقي:", font=("Cairo", 10, "bold")).grid(row=7, column=0, sticky="e", padx=5, pady=5)
         self.e_due = ttk.Entry(top, justify="right")
         self.e_due.grid(row=7, column=1, pady=5, padx=5)
-        # تحديد كمية افتراضية إذا كان هناك دفعات
-        if self.lot_options:
-            self.prefill_quantity()
-        # الأزرار
+
+        # Buttons Frame
         btn_frame = ttk.Frame(top)
         btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
         ttk.Button(btn_frame, text="✅ تأكيد", command=self.on_ok).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
+
+        # --- Initialize state after widgets are created ---
         self.result = None
-        self.parent = parent
-        # تمرير parties بدلاً من تمرير metal_names فقط
-        self.parties = parties
-        # تمرير metal_names المُمررة لاستخدامها لاحقًا إذا لزم الأمر
-        self.initial_metal_names = metal_names
-
-    def on_metal_selected(self, event=None):
-        """تحديث خيارات الدفعات عند تغيير المعدن"""
-        metal_name = self.metal_var.get()
-        self.update_lot_options(metal_name)
-        if self.lot_options:
-            self.lot_var.set(self.lot_options[0])
-            self.prefill_quantity()
+        if self.metal_names:
+            self.cmb_metal.current(0) # Select first metal
+            self.update_lot_options(self.metal_var.get()) # Load lots for the first metal
         else:
-             # إذا لم تكن هناك دفعات، قم بتفريغ حقل الكمية
-            self.e_qty.delete(0, tk.END)
-            self.lot_var.set("") # تفريغ اختيار الدفعة أيضًا
-
-
-    def update_lot_options(self, metal_name):
-        """تحديث قائمة الدفعات المتاحة للمعدن المحدد من بيانات parent الحالية."""
-        # جلب البيانات مباشرة من parent
-        metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
-        if not metal:
-            self.lot_options = []
+            # Disable lot selection if no metals exist
             self.cmb_lot['values'] = []
             self.cmb_lot.state(['disabled'])
             self.lot_var.set("")
+
+
+    def on_metal_selected(self, event=None):
+        """Called when a metal is selected."""
+        selected_metal_name = self.metal_var.get()
+        self.update_lot_options(selected_metal_name)
+        # Prefill quantity if a lot is selected after update
+        if self.lot_options_map:
+            # Select the first available lot by default
+            first_lot_key = next(iter(self.lot_options_map))
+            self.lot_var.set(first_lot_key)
+            self.prefill_quantity()
+
+
+    def update_lot_options(self, metal_name):
+        """Updates the lot combobox based on the selected metal."""
+        self.lot_options_map.clear() # Clear previous map
+        if not metal_name:
+            self.cmb_lot['values'] = []
+            self.cmb_lot.state(['disabled'])
+            self.lot_var.set("")
+            self.e_qty.delete(0, tk.END) # Clear quantity field
             return
-        # إنشاء قائمة بالدفعات المتاحة مع كمياتها وأسعارها
-        self.lot_options = []
-        for idx, lot in enumerate(metal.get("lots", [])):
+
+        metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
+        if not metal:
+             # This shouldn't happen if metal_name came from the metal combobox
+            self.cmb_lot['values'] = []
+            self.cmb_lot.state(['disabled'])
+            self.lot_var.set("")
+            self.e_qty.delete(0, tk.END)
+            return
+
+        lots = metal.get("lots", [])
+        lot_strings = []
+        for idx, lot in enumerate(lots):
             qty = lot.get("quantity", 0)
             price = lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
-            if qty > 0: # فقط الدفعات التي لا تساوي الكمية صفر
-                self.lot_options.append(f"{idx}: {qty} كجم @ {price} جنيه")
-        # تحديث كومبوبوكس الدفعات
-        self.cmb_lot['values'] = self.lot_options
-        if self.lot_options:
+            if qty > 0: # Only show lots with quantity > 0
+                lot_str = f"{idx}: {qty} كجم @ {price} جنيه"
+                lot_strings.append(lot_str)
+                self.lot_options_map[lot_str] = (idx, qty, price) # Store mapping
+
+        self.cmb_lot['values'] = lot_strings
+        if lot_strings:
             self.cmb_lot.state(['!disabled'])
+            # The caller (on_metal_selected) will set the first value and prefill
         else:
             self.cmb_lot.state(['disabled'])
-            self.lot_var.set("") # تأكد من تفريغ الحقل إذا لم تكن هناك خيارات
+            self.lot_var.set("")
+            self.e_qty.delete(0, tk.END)
 
 
     def on_lot_selected(self, event=None):
-        """تحديث حقل الكمية عند اختيار دفعة"""
+        """Called when a lot is selected."""
         self.prefill_quantity()
 
 
     def prefill_quantity(self):
-        """تعبئة الكمية افتراضيًا بأقصى كمية متاحة في الدفعة المحددة من بيانات parent الحالية."""
+        """Prefills the quantity field based on the selected lot."""
         lot_str = self.lot_var.get()
-        if not lot_str:
+        if not lot_str or lot_str not in self.lot_options_map:
             return
-        try:
-            lot_idx = int(lot_str.split(':')[0])
-            metal_name = self.metal_var.get()
-            # جلب البيانات مباشرة من parent
-            metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
-            if metal and lot_idx < len(metal.get("lots", [])):
-                lot = metal["lots"][lot_idx]
-                qty = lot.get("quantity", 0)
-                self.e_qty.delete(0, tk.END)
-                self.e_qty.insert(0, str(qty))
-        except (ValueError, IndexError):
-            pass # اترك الحقل كما هو إذا فشل التحليل
+
+        _, lot_qty, _ = self.lot_options_map[lot_str]
+        self.e_qty.delete(0, tk.END)
+        self.e_qty.insert(0, str(lot_qty))
 
 
     def on_ok(self):
-        """معالجة النقر على زر التأكيد"""
+        """Handles the OK button click."""
         name = self.metal_var.get().strip()
-        qty = self.e_qty.get().strip()
-        price = self.e_price.get().strip()
-        # تحديد اسم العميل
+        qty_str = self.e_qty.get().strip()
+        price_str = self.e_price.get().strip()
+
+        # Customer selection logic
         customer = self.customer_var.get().strip()
         new_customer = self.e_new_customer.get().strip()
         if customer and new_customer:
@@ -1289,110 +1307,119 @@ class RemoveStockDialog:
         else:
             messagebox.showerror("خطأ", "يرجى تحديد عميل أو إدخال عميل جديد.")
             return
-        paid = self.e_paid.get().strip() or "0"
-        due = self.e_due.get().strip() or "0"
-        if not name or not qty or not price:
-            messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة.")
-            return
-        try:
-            requested_qty = float(qty)
-            float(price); float(paid); float(due)
-        except ValueError:
-            messagebox.showerror("خطأ", "قيمة رقمية خاطئة.")
+
+        paid_str = self.e_paid.get().strip() or "0"
+        due_str = self.e_due.get().strip() or "0"
+
+        if not name or not qty_str or not price_str:
+            messagebox.showerror("خطأ", "يرجى ملء كل الحقول المطلوبة (المعدن، الكمية، سعر البيع).")
             return
 
-        # الحصول على فهرس الدفعة المحددة
+        try:
+            qty = float(qty_str)
+            price = float(price_str)
+            paid = float(paid_str)
+            due = float(due_str)
+        except ValueError:
+            messagebox.showerror("خطأ", "يرجى التأكد من أن القيم المدخلة صحيحة.")
+            return
+
+        if qty <= 0:
+             messagebox.showerror("خطأ", "يجب أن تكون الكمية أكبر من صفر.")
+             return
+        if price < 0:
+             messagebox.showerror("خطأ", "لا يمكن أن يكون سعر البيع سالبًا.")
+             return
+
+        # Get lot index from selection
         lot_str = self.lot_var.get()
         lot_index = None
-        if lot_str:
-            try:
-                lot_index = int(lot_str.split(':')[0])
-            except (ValueError, IndexError):
-                lot_index = None
-
-        # جلب البيانات مباشرة من parent
-        metal = next((m for m in self.parent.data["metals"] if m["name"] == name), None)
-        if not metal:
-            messagebox.showerror("خطأ", "المعدن غير موجود.")
-            return
-
-        # التحقق من الكمية المتوفرة في الدفعة المحددة إذا تم تحديدها
-        if lot_index is not None and lot_index < len(metal.get("lots", [])):
-            lot = metal["lots"][lot_index]
-            lot_qty = lot.get("quantity", 0)
-            if requested_qty > lot_qty:
-                # الكمية المطلوبة أكبر من المتوفر في الدفعة المحددة
+        if lot_str and lot_str in self.lot_options_map:
+            lot_index, lot_qty, lot_price = self.lot_options_map[lot_str]
+            # Validate quantity against specific lot if one is selected
+            if qty > lot_qty:
+                # Quantity exceeds specific lot, ask for split or cancel
                 confirmation_msg = (
-                    f"الكمية المطلوبة ({requested_qty}) أكبر من المتوفر في هذه الدفعة ({lot_qty}).\n"
+                    f"الكمية المطلوبة ({qty}) أكبر من المتوفر في الدفعة المحددة ({lot_qty}).\n"
                     "هل تريد تقسيم الكمية على دفعات متعددة؟"
                 )
                 if messagebox.askyesno("تأكيد", confirmation_msg):
-                    # تقسيم الكمية على دفعات متعددة
-                    transactions = self.split_quantity_over_lots(metal, requested_qty, float(price), person, float(paid), float(due))
+                    # Attempt to split
+                    transactions = self.split_quantity_over_lots(name, qty, price, person, paid, due)
                     if transactions:
                         self.result = transactions
                         self.top.destroy()
                         return
                 else:
-                    return # إلغاء العملية إذا رفض المستخدم التقسيم
+                    return # User cancelled the split, so cancel the whole operation
+        else:
+            # No specific lot selected, need to check total available quantity across all lots
+            metal = next((m for m in self.parent.data["metals"] if m["name"] == name), None)
+            if metal:
+                total_available = sum(l.get("quantity", 0) for l in metal.get("lots", []))
+                if qty > total_available:
+                    messagebox.showerror("خطأ", f"الكمية المطلوبة ({qty}) أكبر من الكمية الإجمالية المتوفرة ({total_available}).")
+                    return
+            else:
+                 messagebox.showerror("خطأ", "المعدن المحدد غير موجود.")
+                 return
 
-        # إذا لم يتم تحديد دفعة أو تم التحقق بنجاح من الكمية في الدفعة المحددة
-        total_available = sum(lot.get("quantity", 0) for lot in metal.get("lots", []))
-        if requested_qty > total_available:
-             messagebox.showerror("خطأ", f"الكمية المطلوبة ({requested_qty}) أكبر من الكمية الإجمالية المتوفرة ({total_available}).")
-             return
 
-        self.result = (name, qty, float(price), person, float(paid), float(due), lot_index)
+        # If we reach here, the single transaction is valid
+        self.result = (name, qty_str, price, person, paid, due, lot_index)
         self.top.destroy()
 
 
-    def split_quantity_over_lots(self, metal, total_qty, sale_price, person, paid_amount, due_amount):
-        """تقسيم كمية البيع على دفعات متعددة"""
+    def split_quantity_over_lots(self, metal_name, total_qty, sale_price, person, paid_amount, due_amount):
+        """Handles splitting a sale across multiple lots (FIFO)."""
+        metal = next((m for m in self.parent.data["metals"] if m["name"] == metal_name), None)
+        if not metal:
+            messagebox.showerror("خطأ", "المعدن المحدد غير موجود.")
+            return None
+
+        lots = metal.get("lots", [])
+        # Sort lots by date for FIFO (assuming date format is ISO string)
+        lots_with_index = [(i, lot) for i, lot in enumerate(lots) if lot.get("quantity", 0) > 0]
+        lots_with_index.sort(key=lambda x: x[1].get("date", ""))
+
         remaining_qty = total_qty
         transactions = []
-        used_lots = []
-        # فرز الدفعات حسب التاريخ (FIFO) - باستخدام دالة مساعدة
-        lots_with_index = [(i, lot) for i, lot in enumerate(metal.get("lots", [])) if lot.get("quantity", 0) > 0]
-        lots_with_index.sort(key=lambda x: x[1].get("date", ""))
+        used_lots_summary = []
 
         for lot_index, lot in lots_with_index:
             if remaining_qty <= 0:
-                break # لا حاجة لاستهلاك المزيد من الدفعات
+                break # All quantity has been allocated
+
             lot_qty = lot.get("quantity", 0)
-            qty_to_take = min(remaining_qty, lot_qty)
-            # حساب الربح لهذه الدفعة
             lot_price = lot.get("price_per_kg", metal.get("price_per_kg", 0.0))
-            cost_basis = round(qty_to_take * lot_price, 2)
-            revenue = round(qty_to_take * sale_price, 2)
-            profit = round(revenue - cost_basis, 2)
-            # حساب المبالغ المدفوعة والمطلوبة لهذه الدفعة
-            portion_paid = round(paid_amount * (qty_to_take / total_qty), 2)
-            portion_due = round(due_amount * (qty_to_take / total_qty), 2)
-            transactions.append((
-                metal["name"],
-                qty_to_take,
-                sale_price,
-                person,
-                portion_paid,
-                portion_due,
-                lot_index # الفهرس الأصلي للدفعة
-            ))
-            used_lots.append((lot_index, lot_price, qty_to_take))
+
+            qty_to_take = min(remaining_qty, lot_qty)
+            portion_paid = round((qty_to_take / total_qty) * paid_amount, 2)
+            portion_due = round((qty_to_take / total_qty) * due_amount, 2)
+
+            transactions.append((metal_name, qty_to_take, sale_price, person, portion_paid, portion_due, lot_index))
+            used_lots_summary.append((lot_index, qty_to_take, lot_price))
             remaining_qty -= qty_to_take
 
         if remaining_qty > 1e-9:
             messagebox.showerror("خطأ", f"الكمية المتوفرة ({total_qty - remaining_qty:.6f}) أقل من الكمية المطلوبة ({total_qty}).")
             return None
 
-        # إظهار ملخص للمستخدم
+        # Show summary before confirming split
         summary = "سيتم تقسيم البيع على الدفعات التالية:\n"
-        for lot_index, price, qty in used_lots:
-            summary += f"- الدفعة {lot_index}: {qty:.6f} كجم بسعر شراء {price} جنيه/كجم\n"
-        total_profit = sum((sale_price - lot.get('price_per_kg', metal.get('price_per_kg', 0.0))) * qty
-                           for _, lot, qty in zip(used_lots, [metal['lots'][i] for i, _, _ in used_lots], [q for _, _, q in used_lots]))
-        summary += f"\nإجمالي الربح المتوقع: {total_profit:.2f} جنيه"
+        for lot_idx, qty_taken, price_per_kg in used_lots_summary:
+            summary += f"- دفعة {lot_idx}: {qty_taken:.6f} كجم @ {price_per_kg} جنيه/كجم\n"
+
+        total_cost_basis = sum(qty * price for _, qty, price in used_lots_summary)
+        total_revenue = total_qty * sale_price
+        total_profit = total_revenue - total_cost_basis
+        summary += f"\nإجمالي تكلفة الشراء: {total_cost_basis:.2f} جنيه\n"
+        summary += f"إجمالي سعر البيع: {total_revenue:.2f} جنيه\n"
+        summary += f"إجمالي الربح المتوقع: {total_profit:.2f} جنيه"
+
         if not messagebox.askyesno("تأكيد التقسيم", summary):
             return None
+
         return transactions
 
 
@@ -1922,6 +1949,7 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
 
