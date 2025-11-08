@@ -838,7 +838,7 @@ class MetalInventoryApp(tk.Tk):
     # -----------------------------------------------------------------
     # عرض التفاصيل والتعديل
     # -----------------------------------------------------------------
-   def refresh_table(self):
+    def refresh_table(self):
         q = self.search_var.get().strip()
         for i in self.tree.get_children():
             self.tree.delete(i)
@@ -1952,6 +1952,7 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
 
 
 
