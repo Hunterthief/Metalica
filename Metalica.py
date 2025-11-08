@@ -38,9 +38,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
 import threading
-from PIL import Image, ImageTk
-import io
-import base64
 
 # إعدادات الملفات
 DATA_FILE = "data.json"
@@ -822,12 +819,12 @@ class MetalInventoryApp(tk.Tk):
         top.transient(self)
         top.grab_set()
         
-        ttk.Label(top, text="سعر الشراء الافتراضي (جنيه/كجم):").grid(row=0, column=0, sticky="e")
+        ttk.Label(top, text="سعر الشراء الافتراضي (جنيه/كجم):", font=("Cairo", 10, "bold")).grid(row=0, column=0, sticky="e")
         e_buy = ttk.Entry(top, justify="right")
         e_buy.grid(row=0, column=1, padx=6, pady=4)
         e_buy.insert(0, str(metal.get("price_per_kg", 0.0)))
         
-        ttk.Label(top, text="سعر البيع الافتراضي (جنيه/كجم):").grid(row=1, column=0, sticky="e")
+        ttk.Label(top, text="سعر البيع الافتراضي (جنيه/كجم):", font=("Cairo", 10, "bold")).grid(row=1, column=0, sticky="e")
         e_sell = ttk.Entry(top, justify="right")
         e_sell.grid(row=1, column=1, padx=6, pady=4)
         e_sell.insert(0, str(metal.get("sale_price_per_kg", metal.get("price_per_kg",0.0))))
