@@ -25,10 +25,10 @@ jobs:
 
       - name: Build EXE
         run: |
-          pyinstaller --onefile --windowed metal_inventory.py
+          pyinstaller --onefile --windowed Metalica.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: metal_inventory_exe
-          path: dist/metal_inventory.exe
+          name: Metalica_exe
+          path: dist/Metalica.exe
