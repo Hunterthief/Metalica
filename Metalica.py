@@ -1205,8 +1205,8 @@ class RemoveStockDialog:
         ttk.Button(btn_frame, text="❌ إلغاء", command=self.on_cancel).pack(side=tk.RIGHT, padx=5)
         self.result = None
         self.parent = parent
-        # self.metals = metals # تم إزالة هذا السطر
         self.parties = parties
+
     def on_metal_selected(self, event=None):
         """تحديث خيارات الدفعات عند تغيير المعدن"""
         metal_name = self.metal_var.get()
@@ -1214,6 +1214,7 @@ class RemoveStockDialog:
         if self.lot_options:
             self.lot_var.set(self.lot_options[0])
             self.prefill_quantity()
+
     def update_lot_options(self, metal_name):
         """تحديث قائمة الدفعات المتاحة للمعدن المحدد"""
         # جلب البيانات مباشرة من parent
@@ -1236,9 +1237,11 @@ class RemoveStockDialog:
         else:
             self.cmb_lot.state(['disabled'])
             self.lot_var.set("")
+
     def on_lot_selected(self, event=None):
         """تحديث حقل الكمية عند اختيار دفعة"""
         self.prefill_quantity()
+
     def prefill_quantity(self):
         """تعبئة الكمية افتراضيًا بأقصى كمية متاحة في الدفعة المحددة"""
         lot_str = self.lot_var.get()
@@ -1256,6 +1259,7 @@ class RemoveStockDialog:
                 self.e_qty.insert(0, str(qty))
         except (ValueError, IndexError):
             pass
+
     def on_ok(self):
         """معالجة النقر على زر التأكيد"""
         name = self.metal_var.get().strip()
@@ -1320,6 +1324,7 @@ class RemoveStockDialog:
         # إذا لم يتم تقسيم الكمية أو لم يتم تجاوز الكمية في الدفعة
         self.result = (name, qty, float(price), person, float(paid), float(due), lot_index)
         self.top.destroy()
+
     def split_quantity_over_lots(self, metal, total_qty, sale_price, person, paid_amount, due_amount):
         """تقسيم كمية البيع على دفعات متعددة"""
         remaining_qty = total_qty
@@ -1362,6 +1367,7 @@ class RemoveStockDialog:
         if not messagebox.askyesno("تأكيد التقسيم", summary):
             return None
         return transactions
+
     def on_cancel(self):
         self.top.destroy()
 class HistoryWindow:
@@ -1888,3 +1894,4 @@ if __name__ == "__main__":
     app = MetalInventoryApp()
     app.protocol("WM_DELETE_WINDOW", app.on_exit)
     app.mainloop()
+
